@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye } from 'lucide-react';
+import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -8,10 +8,21 @@ interface DashboardItem {
   empresa_id: string;
   ordem: number;
   titulo_personalizado: string;
-  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum';
+  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico';
   referencias_ids: string[];
   is_active: boolean;
   cor_resultado: string;
+  tipo_grafico?: 'linha' | 'barra' | 'pizza';
+  dados_vinculados?: {
+    id: string;
+    tipo: 'categoria' | 'indicador' | 'conta_dre';
+    nome: string;
+  }[];
+}
+
+interface Company {
+  id: string;
+  trading_name: string;
 }
 
 interface Reference {
@@ -24,8 +35,8 @@ interface Reference {
 type CategoryFilter = 'all' | 'revenue' | 'expense';
 
 export const DashboardConfig = () => {
-  const [companies, setCompanies] = useState<{ id: string; trading_name: string; }[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [items, setItems] = useState<DashboardItem[]>([]);
   const [categories, setCategories] = useState<Reference[]>([]);
   const [indicators, setIndicators] = useState<Reference[]>([]);
@@ -45,7 +56,9 @@ export const DashboardConfig = () => {
     referencias_ids: [] as string[],
     ordem: 0,
     is_active: true,
-    cor_resultado: '#44FF44'
+    cor_resultado: '#44FF44',
+    tipo_grafico: 'linha' as 'linha' | 'barra' | 'pizza',
+    dados_vinculados: [] as { id: string; tipo: 'categoria' | 'indicador' | 'conta_dre'; nome: string; }[]
   });
 
   useEffect(() => {
@@ -54,10 +67,10 @@ export const DashboardConfig = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedCompany) {
+    if (selectedCompanyId) {
       fetchItems();
     }
-  }, [selectedCompany]);
+  }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
     try {
@@ -114,7 +127,7 @@ export const DashboardConfig = () => {
       const { data, error } = await supabase
         .from('dashboard_visual_config')
         .select('*')
-        .eq('empresa_id', selectedCompany)
+        .eq('empresa_id', selectedCompanyId)
         .order('ordem');
 
       if (error) throw error;
@@ -133,13 +146,15 @@ export const DashboardConfig = () => {
       setError(null);
 
       const payload = {
-        empresa_id: selectedCompany,
+        empresa_id: selectedCompanyId,
         ordem: editingItem ? editingItem.ordem : items.length,
         titulo_personalizado: formData.titulo_personalizado,
         tipo: formData.tipo,
-        referencias_ids: formData.referencias_ids,
+        referencias_ids: formData.tipo === 'grafico' ? [] : formData.referencias_ids,
         is_active: formData.is_active,
-        cor_resultado: formData.cor_resultado
+        cor_resultado: formData.cor_resultado,
+        tipo_grafico: formData.tipo === 'grafico' ? formData.tipo_grafico : null,
+        dados_vinculados: formData.tipo === 'grafico' ? formData.dados_vinculados : null
       };
 
       if (editingItem) {
@@ -166,7 +181,9 @@ export const DashboardConfig = () => {
         referencias_ids: [],
         ordem: 0,
         is_active: true,
-        cor_resultado: '#44FF44'
+        cor_resultado: '#44FF44',
+        tipo_grafico: 'linha',
+        dados_vinculados: []
       });
       setSuccess('Item salvo com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
@@ -223,7 +240,9 @@ export const DashboardConfig = () => {
             tipo: item.tipo,
             referencias_ids: item.referencias_ids,
             is_active: item.is_active,
-            cor_resultado: item.cor_resultado
+            cor_resultado: item.cor_resultado,
+            tipo_grafico: item.tipo_grafico,
+            dados_vinculados: item.dados_vinculados
           }))
         );
 
@@ -232,15 +251,6 @@ export const DashboardConfig = () => {
       console.error('Error updating order:', err);
       setError('Erro ao atualizar ordem dos itens');
     }
-  };
-
-  const handleReferenceToggle = (refId: string) => {
-    setFormData(prev => {
-      const newIds = prev.referencias_ids.includes(refId)
-        ? prev.referencias_ids.filter(id => id !== refId)
-        : [...prev.referencias_ids, refId];
-      return { ...prev, referencias_ids: newIds };
-    });
   };
 
   const getFilteredReferences = () => {
@@ -252,7 +262,10 @@ export const DashboardConfig = () => {
     }
     if (formData.tipo === 'indicador') return indicators;
     if (formData.tipo === 'conta_dre') return dreAccounts;
-    return [...categories, ...indicators, ...dreAccounts];
+    if (formData.tipo === 'grafico') {
+      return [...categories, ...indicators, ...dreAccounts];
+    }
+    return [];
   };
 
   return (
@@ -262,7 +275,7 @@ export const DashboardConfig = () => {
           <h1 className="text-2xl font-bold text-zinc-100">Configuração do Dashboard</h1>
           <p className="text-zinc-400 mt-1">Configure os itens que serão exibidos no dashboard</p>
         </div>
-        {selectedCompany && (
+        {selectedCompanyId && (
           <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
@@ -293,8 +306,8 @@ export const DashboardConfig = () => {
             Empresa
           </label>
           <select
-            value={selectedCompany}
-            onChange={(e) => setSelectedCompany(e.target.value)}
+            value={selectedCompanyId}
+            onChange={(e) => setSelectedCompanyId(e.target.value)}
             className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
           >
             <option value="">Selecione uma empresa</option>
@@ -307,7 +320,7 @@ export const DashboardConfig = () => {
         </div>
       </div>
 
-      {selectedCompany && (
+      {selectedCompanyId && (
         <div className="space-y-4">
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="dashboard-items">
@@ -349,10 +362,16 @@ export const DashboardConfig = () => {
                                       {item.tipo === 'indicador' && 'Indicador'}
                                       {item.tipo === 'conta_dre' && 'Conta DRE'}
                                       {item.tipo === 'custom_sum' && 'Soma Personalizada'}
+                                      {item.tipo === 'grafico' && 'Gráfico'}
                                     </p>
                                     <span className="text-sm text-zinc-500">
                                       Ordem: {item.ordem + 1}
                                     </span>
+                                    {item.tipo === 'grafico' && (
+                                      <span className="text-sm text-zinc-500">
+                                        Tipo: {item.tipo_grafico}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -375,7 +394,9 @@ export const DashboardConfig = () => {
                                         referencias_ids: item.referencias_ids,
                                         ordem: item.ordem,
                                         is_active: item.is_active,
-                                        cor_resultado: item.cor_resultado || '#44FF44'
+                                        cor_resultado: item.cor_resultado,
+                                        tipo_grafico: item.tipo_grafico || 'linha',
+                                        dados_vinculados: item.dados_vinculados || []
                                       });
                                       setShowModal(true);
                                     }}
@@ -427,19 +448,30 @@ export const DashboardConfig = () => {
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {viewingItem.referencias_ids.map(refId => {
-                const reference = getFilteredReferences().find(r => r.id === refId);
-                return reference && (
+              {viewingItem.tipo === 'grafico' ? (
+                viewingItem.dados_vinculados?.map(item => (
                   <div
-                    key={refId}
+                    key={item.id}
                     className="p-3 bg-zinc-800 rounded-lg"
                   >
-                    <span className="text-zinc-300">
-                      {reference.code ? `${reference.code} - ${reference.name}` : reference.name}
-                    </span>
+                    <span className="text-zinc-300">{item.nome}</span>
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                viewingItem.referencias_ids.map(refId => {
+                  const reference = getFilteredReferences().find(r => r.id === refId);
+                  return reference && (
+                    <div
+                      key={refId}
+                      className="p-3 bg-zinc-800 rounded-lg"
+                    >
+                      <span className="text-zinc-300">
+                        {reference.code ? `${reference.code} - ${reference.name}` : reference.name}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="flex justify-end mt-6">
@@ -475,7 +507,9 @@ export const DashboardConfig = () => {
                     referencias_ids: [],
                     ordem: 0,
                     is_active: true,
-                    cor_resultado: '#44FF44'
+                    cor_resultado: '#44FF44',
+                    tipo_grafico: 'linha',
+                    dados_vinculados: []
                   });
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
@@ -507,7 +541,8 @@ export const DashboardConfig = () => {
                   onChange={(e) => setFormData({
                     ...formData,
                     tipo: e.target.value as DashboardItem['tipo'],
-                    referencias_ids: []
+                    referencias_ids: [],
+                    dados_vinculados: []
                   })}
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 >
@@ -515,79 +550,146 @@ export const DashboardConfig = () => {
                   <option value="indicador">Indicador</option>
                   <option value="conta_dre">Conta DRE</option>
                   <option value="custom_sum">Soma Personalizada</option>
+                  <option value="grafico">Gráfico</option>
                 </select>
               </div>
 
-              {formData.tipo === 'categoria' && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setCategoryFilter('all')}
-                    className={`px-4 py-2 rounded-lg ${
-                      categoryFilter === 'all'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                    }`}
-                  >
-                    Ambos
-                  </button>
-                  <button
-                    onClick={() => setCategoryFilter('revenue')}
-                    className={`px-4 py-2 rounded-lg ${
-                      categoryFilter === 'revenue'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                    }`}
-                  >
-                    Receita
-                  </button>
-                  <button
-                    onClick={() => setCategoryFilter('expense')}
-                    className={`px-4 py-2 rounded-lg ${
-                      categoryFilter === 'expense'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                    }`}
-                  >
-                    Despesa
-                  </button>
+              {formData.tipo === 'grafico' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      Tipo de Gráfico
+                    </label>
+                    <select
+                      value={formData.tipo_grafico}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        tipo_grafico: e.target.value as 'linha' | 'barra' | 'pizza'
+                      })}
+                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    >
+                      <option value="linha">Linha</option>
+                      <option value="barra">Barra</option>
+                      <option value="pizza">Pizza</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      Dados para o Gráfico
+                    </label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                      {getFilteredReferences().map(ref => (
+                        <label
+                          key={ref.id}
+                          className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.dados_vinculados.some(d => d.id === ref.id)}
+                            onChange={() => {
+                              const isSelected = formData.dados_vinculados.some(d => d.id === ref.id);
+                              setFormData({
+                                ...formData,
+                                dados_vinculados: isSelected
+                                  ? formData.dados_vinculados.filter(d => d.id !== ref.id)
+                                  : [...formData.dados_vinculados, {
+                                      id: ref.id,
+                                      tipo: formData.tipo === 'categoria' ? 'categoria' : 
+                                            formData.tipo === 'indicador' ? 'indicador' : 'conta_dre',
+                                      nome: ref.name
+                                    }]
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                          />
+                          <span className="text-zinc-300">
+                            {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  {formData.tipo === 'categoria' && (
+                    <div className="flex gap-2 mb-4">
+                      <button
+                        onClick={() => setCategoryFilter('all')}
+                        className={`px-4 py-2 rounded-lg ${
+                          categoryFilter === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Ambos
+                      </button>
+                      <button
+                        onClick={() => setCategoryFilter('revenue')}
+                        className={`px-4 py-2 rounded-lg ${
+                          categoryFilter === 'revenue'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Receita
+                      </button>
+                      <button
+                        onClick={() => setCategoryFilter('expense')}
+                        className={`px-4 py-2 rounded-lg ${
+                          categoryFilter === 'expense'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Despesa
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      {formData.tipo === 'categoria' ? 'Categorias' :
+                        formData.tipo === 'indicador' ? 'Indicador' :
+                        formData.tipo === 'conta_dre' ? 'Conta DRE' :
+                        'Itens para Soma'}
+                    </label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                      {getFilteredReferences().map(ref => (
+                        <label
+                          key={ref.id}
+                          className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.referencias_ids.includes(ref.id)}
+                            onChange={() => {
+                              const newIds = formData.referencias_ids.includes(ref.id)
+                                ? formData.referencias_ids.filter(id => id !== ref.id)
+                                : [...formData.referencias_ids, ref.id];
+                              setFormData({ ...formData, referencias_ids: newIds });
+                            }}
+                            className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                          />
+                          <span className="text-zinc-300">
+                            {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
+                          </span>
+                          {ref.type && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              ref.type === 'revenue' 
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {ref.type === 'revenue' ? 'Receita' : 'Despesa'}
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  {formData.tipo === 'categoria' ? 'Categorias' :
-                    formData.tipo === 'indicador' ? 'Indicador' :
-                    formData.tipo === 'conta_dre' ? 'Conta DRE' :
-                    'Itens para Soma'}
-                </label>
-                <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
-                  {getFilteredReferences().map(ref => (
-                    <label
-                      key={ref.id}
-                      className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.referencias_ids.includes(ref.id)}
-                        onChange={() => handleReferenceToggle(ref.id)}
-                        className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
-                      />
-                      <span className="text-zinc-300">
-                        {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
-                      </span>
-                      {ref.type && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          ref.type === 'revenue' 
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-red-500/20 text-red-400'
-                        }`}>
-                          {ref.type === 'revenue' ? 'Receita' : 'Despesa'}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
@@ -642,7 +744,9 @@ export const DashboardConfig = () => {
                     referencias_ids: [],
                     ordem: 0,
                     is_active: true,
-                    cor_resultado: '#44FF44'
+                    cor_resultado: '#44FF44',
+                    tipo_grafico: 'linha',
+                    dados_vinculados: []
                   });
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
@@ -651,7 +755,11 @@ export const DashboardConfig = () => {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.referencias_ids.length}
+                disabled={!formData.titulo_personalizado || (
+                  formData.tipo !== 'grafico' && !formData.referencias_ids.length
+                ) || (
+                  formData.tipo === 'grafico' && !formData.dados_vinculados.length
+                )}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Salvar
