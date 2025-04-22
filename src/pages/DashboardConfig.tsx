@@ -22,7 +22,7 @@ interface DashboardItem {
   empresa_id: string;
   ordem: number;
   titulo_personalizado: string;
-  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico' | 'top_lista';
+  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico' | 'lista';
   referencias_ids: string[];
   is_active: boolean;
   cor_resultado: string;
@@ -153,12 +153,12 @@ export const DashboardConfig = () => {
         ordem: editingItem ? editingItem.ordem : items.length,
         titulo_personalizado: formData.titulo_personalizado,
         tipo: formData.tipo,
-        referencias_ids: formData.tipo === 'grafico' || formData.tipo === 'top_lista' ? [] : formData.referencias_ids,
+        referencias_ids: formData.tipo === 'grafico' || formData.tipo === 'lista' ? [] : formData.referencias_ids,
         is_active: formData.is_active,
         cor_resultado: formData.cor_resultado,
         tipo_grafico: formData.tipo === 'grafico' ? formData.tipo_grafico : null,
-        dados_vinculados: (formData.tipo === 'grafico' || formData.tipo === 'top_lista') ? formData.dados_vinculados : null,
-        top_limit: formData.tipo === 'top_lista' ? formData.top_limit : null
+        dados_vinculados: (formData.tipo === 'grafico' || formData.tipo === 'lista') ? formData.dados_vinculados : null,
+        top_limit: formData.tipo === 'lista' ? formData.top_limit : null
       };
 
       if (editingItem) {
@@ -229,7 +229,7 @@ export const DashboardConfig = () => {
     }
     if (formData.tipo === 'indicador') return indicators;
     if (formData.tipo === 'conta_dre') return dreAccounts;
-    if (formData.tipo === 'grafico' || formData.tipo === 'top_lista') {
+    if (formData.tipo === 'grafico' || formData.tipo === 'lista') {
       let refs = [];
       if (dataSourceFilter === 'all' || dataSourceFilter === 'categoria') {
         refs = [...refs, ...categories];
@@ -311,7 +311,7 @@ export const DashboardConfig = () => {
                     {item.tipo === 'conta_dre' && 'Conta DRE'}
                     {item.tipo === 'custom_sum' && 'Soma Personalizada'}
                     {item.tipo === 'grafico' && `Gráfico (${item.tipo_grafico})`}
-                    {item.tipo === 'top_lista' && `Top ${item.top_limit} Lista`}
+                    {item.tipo === 'lista' && `Lista (Top ${item.top_limit})`}
                   </p>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export const DashboardConfig = () => {
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {(viewingItem.tipo === 'grafico' || viewingItem.tipo === 'top_lista') ? (
+              {(viewingItem.tipo === 'grafico' || viewingItem.tipo === 'lista') ? (
                 viewingItem.dados_vinculados?.map(item => (
                   <div
                     key={item.id}
@@ -487,174 +487,100 @@ export const DashboardConfig = () => {
                   <option value="conta_dre">Conta DRE</option>
                   <option value="custom_sum">Soma Personalizada</option>
                   <option value="grafico">Gráfico</option>
-                  <option value="top_lista">Top Lista</option>
+                  <option value="lista">Lista</option>
                 </select>
               </div>
 
+              {formData.tipo === 'lista' && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">
+                    Limite do Top
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.top_limit}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      top_limit: parseInt(e.target.value) || 5
+                    })}
+                    min={1}
+                    max={20}
+                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  />
+                </div>
+              )}
+
               {formData.tipo === 'grafico' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">
-                      Tipo de Gráfico
-                    </label>
-                    <select
-                      value={formData.tipo_grafico}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        tipo_grafico: e.target.value as 'linha' | 'barra' | 'pizza'
-                      })}
-                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">
+                    Tipo de Gráfico
+                  </label>
+                  <select
+                    value={formData.tipo_grafico}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      tipo_grafico: e.target.value as 'linha' | 'barra' | 'pizza'
+                    })}
+                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  >
+                    <option value="linha">Linha</option>
+                    <option value="barra">Barra</option>
+                    <option value="pizza">Pizza</option>
+                  </select>
+                </div>
+              )}
+
+              {(formData.tipo === 'grafico' || formData.tipo === 'lista') && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">
+                    Tipo de Dados
+                  </label>
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setDataSourceFilter('all')}
+                      className={`px-4 py-2 rounded-lg ${
+                        dataSourceFilter === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
                     >
-                      <option value="linha">Linha</option>
-                      <option value="barra">Barra</option>
-                      <option value="pizza">Pizza</option>
-                    </select>
+                      Todos
+                    </button>
+                    <button
+                      onClick={() => setDataSourceFilter('categoria')}
+                      className={`px-4 py-2 rounded-lg ${
+                        dataSourceFilter === 'categoria'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Categorias
+                    </button>
+                    <button
+                      onClick={() => setDataSourceFilter('indicador')}
+                      className={`px-4 py-2 rounded-lg ${
+                        dataSourceFilter === 'indicador'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Indicadores
+                    </button>
+                    <button
+                      onClick={() => setDataSourceFilter('conta_dre')}
+                      className={`px-4 py-2 rounded-lg ${
+                        dataSourceFilter === 'conta_dre'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Contas DRE
+                    </button>
                   </div>
-
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">
-                      Tipo de Dados
-                    </label>
-                    <div className="flex gap-2 mb-4">
-                      <button
-                        onClick={() => setDataSourceFilter('all')}
-                        className={`px-4 py-2 rounded-lg ${
-                          dataSourceFilter === 'all'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        Todos
-                      </button>
-                      <button
-                        onClick={() => setDataSourceFilter('categoria')}
-                        className={`px-4 py-2 rounded-lg ${
-                          dataSourceFilter === 'categoria'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        Categorias
-                      </button>
-                      <button
-                        onClick={() => setDataSourceFilter('indicador')}
-                        className={`px-4 py-2 rounded-lg ${
-                          dataSourceFilter === 'indicador'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        Indicadores
-                      </button>
-                      <button
-                        onClick={() => setDataSourceFilter('conta_dre')}
-                        className={`px-4 py-2 rounded-lg ${
-                          dataSourceFilter === 'conta_dre'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        }`}
-                      >
-                        Contas DRE
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">
-                      Dados para o Gráfico
-                    </label>
-                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
-                      {getFilteredReferences().map(ref => (
-                        <label
-                          key={ref.id}
-                          className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={formData.dados_vinculados.some(d => d.id === ref.id)}
-                            onChange={() => {
-                              const isSelected = formData.dados_vinculados.some(d => d.id === ref.id);
-                              setFormData({
-                                ...formData,
-                                dados_vinculados: isSelected
-                                  ? formData.dados_vinculados.filter(d => d.id !== ref.id)
-                                  : [...formData.dados_vinculados, {
-                                      id: ref.id,
-                                      tipo: dataSourceFilter === 'all' ? 'categoria' : dataSourceFilter,
-                                      nome: ref.name
-                                    }]
-                              });
-                            }}
-                            className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
-                          />
-                          <span className="text-zinc-300">
-                            {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
 
-              {formData.tipo === 'top_lista' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">
-                      Limite de Itens
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.top_limit}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        top_limit: parseInt(e.target.value) || 5
-                      })}
-                      min={1}
-                      max={20}
-                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">
-                      Selecionar Dados
-                    </label>
-                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
-                      {getFilteredReferences().map(ref => (
-                        <label
-                          key={ref.id}
-                          className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={formData.dados_vinculados.some(d => d.id === ref.id)}
-                            onChange={() => {
-                              const isSelected = formData.dados_vinculados.some(d => d.id === ref.id);
-                              setFormData({
-                                ...formData,
-                                dados_vinculados: isSelected
-                                  ? formData.dados_vinculados.filter(d => d.id !== ref.id)
-                                  : [...formData.dados_vinculados, {
-                                      id: ref.id,
-                                      tipo: dataSourceFilter === 'all' ? 'categoria' : dataSourceFilter,
-                                      nome: ref.name
-                                    }]
-                              });
-                            }}
-                            className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
-                          />
-                          <span className="text-zinc-300">
-                            {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {formData.tipo !== 'grafico' && formData.tipo !== 'top_lista' && (
+              {formData.tipo !== 'grafico' && formData.tipo !== 'lista' && (
                 <div>
                   {formData.tipo === 'categoria' && (
                     <div className="flex gap-2 mb-4">
@@ -734,6 +660,44 @@ export const DashboardConfig = () => {
                 </div>
               )}
 
+              {(formData.tipo === 'grafico' || formData.tipo === 'lista') && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">
+                    Selecionar Dados
+                  </label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                    {getFilteredReferences().map(ref => (
+                      <label
+                        key={ref.id}
+                        className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.dados_vinculados.some(d => d.id === ref.id)}
+                          onChange={() => {
+                            const isSelected = formData.dados_vinculados.some(d => d.id === ref.id);
+                            setFormData({
+                              ...formData,
+                              dados_vinculados: isSelected
+                                ? formData.dados_vinculados.filter(d => d.id !== ref.id)
+                                : [...formData.dados_vinculados, {
+                                    id: ref.id,
+                                    tipo: dataSourceFilter === 'all' ? 'categoria' : dataSourceFilter,
+                                    nome: ref.name
+                                  }]
+                            });
+                          }}
+                          className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                        />
+                        <span className="text-zinc-300">
+                          {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
                   Cor do Resultado
@@ -746,7 +710,6 @@ export const DashboardConfig = () => {
                       onChange={() => setFormData({ ...formData, cor_resultado: '#44FF44' })}
                       className="text-green-600"
                     />
-                    
                     <span className="text-green-400">Verde</span>
                   </label>
                   <label className="flex items-center gap-2">
@@ -792,6 +755,7 @@ export const DashboardConfig = () => {
                     tipo_grafico: 'linha',
                     dados_vinculados: [],
                     top_limit: 5
+                
                   });
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
@@ -801,9 +765,9 @@ export const DashboardConfig = () => {
               <button
                 onClick={handleSave}
                 disabled={!formData.titulo_personalizado || (
-                  formData.tipo !== 'grafico' && formData.tipo !== 'top_lista' && !formData.referencias_ids.length
+                  formData.tipo !== 'grafico' && formData.tipo !== 'lista' && !formData.referencias_ids.length
                 ) || (
-                  (formData.tipo === 'grafico' || formData.tipo === 'top_lista') && !formData.dados_vinculados.length
+                  (formData.tipo === 'grafico' || formData.tipo === 'lista') && !formData.dados_vinculados.length
                 )}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
