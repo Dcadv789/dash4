@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { LineChart, BarChart, Calendar, TrendingUp, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { Circle, ArrowUp, ArrowDown } from 'lucide-react';
 
 interface Company {
   id: string;
@@ -20,6 +20,13 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
+const MONTH_ABBREVIATIONS: { [key: string]: string } = {
+  'Janeiro': 'Jan', 'Fevereiro': 'Fev', 'Março': 'Mar',
+  'Abril': 'Abr', 'Maio': 'Mai', 'Junho': 'Jun',
+  'Julho': 'Jul', 'Agosto': 'Ago', 'Setembro': 'Set',
+  'Outubro': 'Out', 'Novembro': 'Nov', 'Dezembro': 'Dez'
+};
+
 interface DashboardItem {
   id: string;
   titulo_personalizado: string;
@@ -36,7 +43,7 @@ export const Dashboard = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTHS[new Date().getMonth()]);
   const [items, setItems] = useState<DashboardItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
   const { user } = useAuth();
@@ -58,7 +65,7 @@ export const Dashboard = () => {
   }, [currentUser]);
 
   useEffect(() => {
-    if (selectedCompanyId) {
+    if (selectedCompanyId && selectedYear && selectedMonth) {
       fetchDashboardItems();
     }
   }, [selectedCompanyId, selectedYear, selectedMonth]);
@@ -95,12 +102,27 @@ export const Dashboard = () => {
     }
   };
 
-  const getPreviousMonth = (month: string, year: number): { month: string; year: number } => {
-    const monthIndex = MONTHS.indexOf(month);
-    if (monthIndex === 0) {
-      return { month: MONTHS[11], year: year - 1 };
+  const getLast12Months = () => {
+    const months = [];
+    const currentMonthIndex = MONTHS.indexOf(selectedMonth);
+    const currentYear = selectedYear;
+
+    for (let i = 11; i >= 0; i--) {
+      let monthIndex = currentMonthIndex - i;
+      let year = currentYear;
+
+      if (monthIndex < 0) {
+        monthIndex += 12;
+        year--;
+      }
+
+      months.push({
+        month: MONTHS[monthIndex],
+        year: year
+      });
     }
-    return { month: MONTHS[monthIndex - 1], year };
+
+    return months;
   };
 
   const fetchDashboardItems = async () => {
@@ -108,7 +130,7 @@ export const Dashboard = () => {
       setLoading(true);
       setError(null);
 
-      const { month: prevMonth, year: prevYear } = getPreviousMonth(selectedMonth, selectedYear);
+      const months = getLast12Months();
 
       const { data: configData, error: configError } = await supabase
         .from('dashboard_visual_config')
@@ -123,7 +145,6 @@ export const Dashboard = () => {
         let currentValue = 0;
         let previousValue = 0;
 
-        // Buscar dados do mês atual
         const { data: currentData } = await supabase
           .from('dados_brutos')
           .select('valor')
@@ -134,13 +155,13 @@ export const Dashboard = () => {
 
         currentValue = currentData?.reduce((sum, d) => sum + d.valor, 0) || 0;
 
-        // Buscar dados do mês anterior
+        const prevMonth = months[1];
         const { data: previousData } = await supabase
           .from('dados_brutos')
           .select('valor')
           .eq('empresa_id', selectedCompanyId)
-          .eq('ano', prevYear)
-          .eq('mes', prevMonth)
+          .eq('ano', prevMonth.year)
+          .eq('mes', prevMonth.month)
           .in(item.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', item.referencias_ids);
 
         previousValue = previousData?.reduce((sum, d) => sum + d.valor, 0) || 0;
@@ -198,7 +219,7 @@ export const Dashboard = () => {
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
                         <div className="p-2 bg-zinc-700 rounded-lg">
-                          <TrendingUp size={20} className="text-zinc-400" />
+                          <Circle size={20} className="text-zinc-400" style={{ color: item.cor_resultado }} />
                         </div>
                       </div>
                       <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
@@ -206,7 +227,7 @@ export const Dashboard = () => {
                       </p>
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-700">
-                      <p className="text-sm text-zinc-400">Comparado ao mês anterior</p>
+                      <p className="text-sm text-zinc-400">Variação mensal</p>
                       <div className="flex items-center gap-2">
                         {variation.isPositive ? (
                           <ArrowUp className="text-green-400" size={16} />
@@ -233,7 +254,7 @@ export const Dashboard = () => {
         <div className="bg-zinc-800 rounded-xl p-6 h-[400px]">
           {mainChart ? (
             <div className="flex items-center justify-center h-full">
-              <LineChart className="text-zinc-400" size={32} />
+              <Circle className="text-zinc-400" size={32} style={{ color: mainChart.cor_resultado }} />
             </div>
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -249,18 +270,14 @@ export const Dashboard = () => {
             const variation = item ? calculateVariation(item.valor, item.valorAnterior) : { percentage: 0, isPositive: true };
 
             return (
-              <div key={index} className="bg-zinc-800 rounded-xl p-6 flex flex-col justify-between min-h-[180px]">
+              <div key={index} className="bg-zinc-800 rounded-xl p-6 flex flex-col justify-between min-h-[240px]">
                 {item ? (
                   <>
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
                         <div className="p-2 bg-zinc-700 rounded-lg">
-                          {index === 0 ? (
-                            <BarChart size={20} className="text-zinc-400" />
-                          ) : (
-                            <Calendar size={20} className="text-zinc-400" />
-                          )}
+                          <Circle size={20} className="text-zinc-400" style={{ color: item.cor_resultado }} />
                         </div>
                       </div>
                       <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
@@ -268,7 +285,7 @@ export const Dashboard = () => {
                       </p>
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-700">
-                      <p className="text-sm text-zinc-400">Comparado ao mês anterior</p>
+                      <p className="text-sm text-zinc-400">Variação mensal</p>
                       <div className="flex items-center gap-2">
                         {variation.isPositive ? (
                           <ArrowUp className="text-green-400" size={16} />
@@ -294,8 +311,18 @@ export const Dashboard = () => {
     );
   };
 
+  if (!currentUser) {
+    return (
+      <div className="max-w-[1600px] mx-auto py-8">
+        <div className="bg-zinc-900 rounded-xl p-8 text-center">
+          <p className="text-zinc-400">Carregando dados do usuário...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-[1600px] mx-auto py-8 max-h-[1080px] overflow-y-auto">
+    <div className="max-w-[1600px] mx-auto py-8">
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
         <div className="flex justify-between items-start mb-6">
           <div>
@@ -307,7 +334,7 @@ export const Dashboard = () => {
               <select
                 value={selectedCompanyId}
                 onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 appearance-none"
               >
                 <option value="">Selecione uma empresa</option>
                 {companies.map(company => (
@@ -320,7 +347,7 @@ export const Dashboard = () => {
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+              className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 appearance-none"
             >
               {Array.from({ length: 5 }, (_, i) => selectedYear - 2 + i).map(year => (
                 <option key={year} value={year}>{year}</option>
@@ -329,7 +356,7 @@ export const Dashboard = () => {
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+              className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 appearance-none"
             >
               {MONTHS.map(month => (
                 <option key={month} value={month}>{month}</option>
@@ -340,7 +367,6 @@ export const Dashboard = () => {
 
         {error ? (
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-            <AlertCircle size={20} className="text-red-400" />
             <p className="text-red-400">{error}</p>
           </div>
         ) : loading ? (
