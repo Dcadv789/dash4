@@ -21,9 +21,11 @@ interface Reference {
   type?: 'revenue' | 'expense';
 }
 
+type CategoryFilter = 'all' | 'revenue' | 'expense';
+
 export const DashboardConfig = () => {
   const [companies, setCompanies] = useState<{ id: string; trading_name: string; }[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [items, setItems] = useState<DashboardItem[]>([]);
   const [categories, setCategories] = useState<Reference[]>([]);
   const [indicators, setIndicators] = useState<Reference[]>([]);
@@ -35,6 +37,7 @@ export const DashboardConfig = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewingItem, setViewingItem] = useState<DashboardItem | null>(null);
   const [editingItem, setEditingItem] = useState<DashboardItem | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
   const [formData, setFormData] = useState({
     titulo_personalizado: '',
@@ -124,43 +127,6 @@ export const DashboardConfig = () => {
     }
   };
 
-  const handleDragEnd = async (result: any) => {
-    if (!result.destination) return;
-
-    const newItems = Array.from(items);
-    const [reorderedItem] = newItems.splice(result.source.index, 1);
-    newItems.splice(result.destination.index, 0, reorderedItem);
-
-    // Update ordem for all items
-    newItems.forEach((item, index) => {
-      item.ordem = index;
-    });
-
-    setItems(newItems);
-
-    try {
-      const { error } = await supabase
-        .from('dashboard_visual_config')
-        .upsert(
-          newItems.map(item => ({
-            id: item.id,
-            ordem: item.ordem,
-            empresa_id: item.empresa_id,
-            titulo_personalizado: item.titulo_personalizado,
-            tipo: item.tipo,
-            referencias_ids: item.referencias_ids,
-            is_active: item.is_active,
-            cor_resultado: item.cor_resultado
-          }))
-        );
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error updating order:', err);
-      setError('Erro ao atualizar ordem dos itens');
-    }
-  };
-
   const handleSave = async () => {
     try {
       setLoading(true);
@@ -232,11 +198,40 @@ export const DashboardConfig = () => {
     }
   };
 
-  const getReferenceOptions = () => {
-    if (formData.tipo === 'categoria') return categories;
-    if (formData.tipo === 'indicador') return indicators;
-    if (formData.tipo === 'conta_dre') return dreAccounts;
-    return [...categories, ...indicators, ...dreAccounts];
+  const handleDragEnd = async (result: any) => {
+    if (!result.destination) return;
+
+    const newItems = Array.from(items);
+    const [reorderedItem] = newItems.splice(result.source.index, 1);
+    newItems.splice(result.destination.index, 0, reorderedItem);
+
+    newItems.forEach((item, index) => {
+      item.ordem = index;
+    });
+
+    setItems(newItems);
+
+    try {
+      const { error } = await supabase
+        .from('dashboard_visual_config')
+        .upsert(
+          newItems.map(item => ({
+            id: item.id,
+            ordem: item.ordem,
+            empresa_id: item.empresa_id,
+            titulo_personalizado: item.titulo_personalizado,
+            tipo: item.tipo,
+            referencias_ids: item.referencias_ids,
+            is_active: item.is_active,
+            cor_resultado: item.cor_resultado
+          }))
+        );
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error updating order:', err);
+      setError('Erro ao atualizar ordem dos itens');
+    }
   };
 
   const handleReferenceToggle = (refId: string) => {
@@ -246,6 +241,18 @@ export const DashboardConfig = () => {
         : [...prev.referencias_ids, refId];
       return { ...prev, referencias_ids: newIds };
     });
+  };
+
+  const getFilteredReferences = () => {
+    if (formData.tipo === 'categoria') {
+      return categories.filter(cat => {
+        if (categoryFilter === 'all') return true;
+        return cat.type === categoryFilter;
+      });
+    }
+    if (formData.tipo === 'indicador') return indicators;
+    if (formData.tipo === 'conta_dre') return dreAccounts;
+    return [...categories, ...indicators, ...dreAccounts];
   };
 
   return (
@@ -421,7 +428,7 @@ export const DashboardConfig = () => {
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {viewingItem.referencias_ids.map(refId => {
-                const reference = getReferenceOptions().find(r => r.id === refId);
+                const reference = getFilteredReferences().find(r => r.id === refId);
                 return reference && (
                   <div
                     key={refId}
@@ -511,6 +518,41 @@ export const DashboardConfig = () => {
                 </select>
               </div>
 
+              {formData.tipo === 'categoria' && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCategoryFilter('all')}
+                    className={`px-4 py-2 rounded-lg ${
+                      categoryFilter === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    Ambos
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('revenue')}
+                    className={`px-4 py-2 rounded-lg ${
+                      categoryFilter === 'revenue'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    Receita
+                  </button>
+                  <button
+                    onClick={() => setCategoryFilter('expense')}
+                    className={`px-4 py-2 rounded-lg ${
+                      categoryFilter === 'expense'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    Despesa
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
                   {formData.tipo === 'categoria' ? 'Categorias' :
@@ -519,7 +561,7 @@ export const DashboardConfig = () => {
                     'Itens para Soma'}
                 </label>
                 <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
-                  {getReferenceOptions().map(ref => (
+                  {getFilteredReferences().map(ref => (
                     <label
                       key={ref.id}
                       className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
