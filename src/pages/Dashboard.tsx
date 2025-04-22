@@ -38,6 +38,14 @@ interface ChartData {
   [key: string]: string | number;
 }
 
+interface Indicator {
+  id: string;
+  type: 'manual' | 'calculated';
+  calculation_type?: 'category' | 'indicator';
+  operation?: 'sum' | 'subtract' | 'multiply' | 'divide';
+  source_ids: string[];
+}
+
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -138,6 +146,95 @@ export const Dashboard = () => {
     return months;
   };
 
+  const calculateIndicatorValue = async (
+    indicatorId: string,
+    month: string,
+    year: number,
+    processedIndicators: Set<string> = new Set()
+  ): Promise<number> => {
+    // Prevent infinite recursion
+    if (processedIndicators.has(indicatorId)) {
+      console.warn('Circular reference detected in indicator:', indicatorId);
+      return 0;
+    }
+    processedIndicators.add(indicatorId);
+
+    try {
+      // Get indicator configuration
+      const { data: indicator, error: indicatorError } = await supabase
+        .from('indicators')
+        .select('*')
+        .eq('id', indicatorId)
+        .single();
+
+      if (indicatorError) throw indicatorError;
+
+      // For manual indicators, get the value directly
+      if (indicator.type === 'manual') {
+        const { data: values } = await supabase
+          .from('dados_brutos')
+          .select('valor')
+          .eq('empresa_id', selectedCompanyId)
+          .eq('ano', year)
+          .eq('mes', month)
+          .eq('indicador_id', indicatorId);
+
+        return values?.[0]?.valor || 0;
+      }
+
+      // For calculated indicators, process each source
+      let result = 0;
+      const sourceIds = indicator.source_ids || [];
+
+      for (const sourceId of sourceIds) {
+        let sourceValue = 0;
+
+        if (indicator.calculation_type === 'category') {
+          // Get category value
+          const { data: values } = await supabase
+            .from('dados_brutos')
+            .select('valor, categories!inner(type)')
+            .eq('empresa_id', selectedCompanyId)
+            .eq('ano', year)
+            .eq('mes', month)
+            .eq('categoria_id', sourceId);
+
+          if (values && values.length > 0) {
+            sourceValue = values[0].categories.type === 'expense' ? -values[0].valor : values[0].valor;
+          }
+        } else {
+          // Recursively calculate indicator value
+          sourceValue = await calculateIndicatorValue(sourceId, month, year, processedIndicators);
+        }
+
+        // Apply operation
+        if (result === 0) {
+          result = sourceValue;
+        } else {
+          switch (indicator.operation) {
+            case 'sum':
+              result += sourceValue;
+              break;
+            case 'subtract':
+              result -= sourceValue;
+              break;
+            case 'multiply':
+              result *= sourceValue;
+              break;
+            case 'divide':
+              result = sourceValue !== 0 ? result / sourceValue : 0;
+              break;
+          }
+        }
+      }
+
+      return result;
+    } catch (err) {
+      console.error('Error calculating indicator value:', err);
+      return 0;
+    }
+  };
+
   const fetchDashboardItems = async () => {
     try {
       setLoading(true);
@@ -160,20 +257,31 @@ export const Dashboard = () => {
 
           await Promise.all(item.dados_vinculados?.map(async (vinculado) => {
             await Promise.all(months.map(async ({ month, year }) => {
-              const { data } = await supabase
-                .from('dados_brutos')
-                .select('valor')
-                .eq('empresa_id', selectedCompanyId)
-                .eq('ano', year)
-                .eq('mes', month)
-                .eq(vinculado.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', vinculado.id);
+              if (vinculado.tipo === 'categoria') {
+                const { data } = await supabase
+                  .from('dados_brutos')
+                  .select('valor, categories!inner(type)')
+                  .eq('empresa_id', selectedCompanyId)
+                  .eq('ano', year)
+                  .eq('mes', month)
+                  .eq('categoria_id', vinculado.id);
 
-              const value = data?.reduce((sum, d) => sum + d.valor, 0) || 0;
-              
-              if (!chartData[`${month}-${year}`]) {
-                chartData[`${month}-${year}`] = {};
+                const value = data?.reduce((sum, d) => {
+                  return sum + (d.categories.type === 'expense' ? -d.valor : d.valor);
+                }, 0) || 0;
+
+                if (!chartData[`${month}-${year}`]) {
+                  chartData[`${month}-${year}`] = {};
+                }
+                chartData[`${month}-${year}`][vinculado.nome] = value;
+              } else {
+                const value = await calculateIndicatorValue(vinculado.id, month, year);
+                
+                if (!chartData[`${month}-${year}`]) {
+                  chartData[`${month}-${year}`] = {};
+                }
+                chartData[`${month}-${year}`][vinculado.nome] = value;
               }
-              chartData[`${month}-${year}`][vinculado.nome] = value;
             }));
           }) || []);
 
@@ -186,28 +294,49 @@ export const Dashboard = () => {
         let currentValue = 0;
         let previousValue = 0;
 
-        // Buscar dados do mês atual
-        const { data: currentData } = await supabase
-          .from('dados_brutos')
-          .select('valor')
-          .eq('empresa_id', selectedCompanyId)
-          .eq('ano', selectedYear)
-          .eq('mes', selectedMonth)
-          .in(item.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', item.referencias_ids);
+        if (item.tipo === 'categoria') {
+          // Get current month value for categories
+          const { data: currentData } = await supabase
+            .from('dados_brutos')
+            .select('valor, categories!inner(type)')
+            .eq('empresa_id', selectedCompanyId)
+            .eq('ano', selectedYear)
+            .eq('mes', selectedMonth)
+            .in('categoria_id', item.referencias_ids);
 
-        currentValue = currentData?.reduce((sum, d) => sum + d.valor, 0) || 0;
+          currentValue = currentData?.reduce((sum, d) => {
+            return sum + (d.categories.type === 'expense' ? -d.valor : d.valor);
+          }, 0) || 0;
 
-        // Buscar dados do mês anterior
-        const prevMonth = months[1];
-        const { data: previousData } = await supabase
-          .from('dados_brutos')
-          .select('valor')
-          .eq('empresa_id', selectedCompanyId)
-          .eq('ano', prevMonth.year)
-          .eq('mes', prevMonth.month)
-          .in(item.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', item.referencias_ids);
+          // Get previous month value
+          const prevMonth = months[1];
+          const { data: previousData } = await supabase
+            .from('dados_brutos')
+            .select('valor, categories!inner(type)')
+            .eq('empresa_id', selectedCompanyId)
+            .eq('ano', prevMonth.year)
+            .eq('mes', prevMonth.month)
+            .in('categoria_id', item.referencias_ids);
 
-        previousValue = previousData?.reduce((sum, d) => sum + d.valor, 0) || 0;
+          previousValue = previousData?.reduce((sum, d) => {
+            return sum + (d.categories.type === 'expense' ? -d.valor : d.valor);
+          }, 0) || 0;
+        } else if (item.tipo === 'indicador') {
+          // Calculate current month value for indicators
+          currentValue = await Promise.all(
+            item.referencias_ids.map(id => 
+              calculateIndicatorValue(id, selectedMonth, selectedYear)
+            )
+          ).then(values => values.reduce((sum, value) => sum + value, 0));
+
+          // Calculate previous month value
+          const prevMonth = months[1];
+          previousValue = await Promise.all(
+            item.referencias_ids.map(id => 
+              calculateIndicatorValue(id, prevMonth.month, prevMonth.year)
+            )
+          ).then(values => values.reduce((sum, value) => sum + value, 0));
+        }
 
         return {
           ...item,
