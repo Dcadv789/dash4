@@ -32,6 +32,7 @@ interface Reference {
 }
 
 type CategoryFilter = 'all' | 'revenue' | 'expense';
+type DataSourceFilter = 'all' | 'categoria' | 'indicador' | 'conta_dre';
 
 export const DashboardConfig = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -48,6 +49,7 @@ export const DashboardConfig = () => {
   const [viewingItem, setViewingItem] = useState<DashboardItem | null>(null);
   const [editingItem, setEditingItem] = useState<DashboardItem | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [dataSourceFilter, setDataSourceFilter] = useState<DataSourceFilter>('all');
 
   const [formData, setFormData] = useState({
     titulo_personalizado: '',
@@ -224,7 +226,17 @@ export const DashboardConfig = () => {
     if (formData.tipo === 'indicador') return indicators;
     if (formData.tipo === 'conta_dre') return dreAccounts;
     if (formData.tipo === 'grafico') {
-      return [...categories, ...indicators, ...dreAccounts];
+      let refs = [];
+      if (dataSourceFilter === 'all' || dataSourceFilter === 'categoria') {
+        refs = [...refs, ...categories];
+      }
+      if (dataSourceFilter === 'all' || dataSourceFilter === 'indicador') {
+        refs = [...refs, ...indicators];
+      }
+      if (dataSourceFilter === 'all' || dataSourceFilter === 'conta_dre') {
+        refs = [...refs, ...dreAccounts];
+      }
+      return refs;
     }
     return [];
   };
@@ -486,7 +498,7 @@ export const DashboardConfig = () => {
                 </select>
               </div>
 
-              {formData.tipo === 'grafico' ? (
+              {formData.tipo === 'grafico' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-zinc-400 mb-1">
@@ -504,6 +516,54 @@ export const DashboardConfig = () => {
                       <option value="barra">Barra</option>
                       <option value="pizza">Pizza</option>
                     </select>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      Tipo de Dados
+                    </label>
+                    <div className="flex gap-2 mb-4">
+                      <button
+                        onClick={() => setDataSourceFilter('all')}
+                        className={`px-4 py-2 rounded-lg ${
+                          dataSourceFilter === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        onClick={() => setDataSourceFilter('categoria')}
+                        className={`px-4 py-2 rounded-lg ${
+                          dataSourceFilter === 'categoria'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Categorias
+                      </button>
+                      <button
+                        onClick={() => setDataSourceFilter('indicador')}
+                        className={`px-4 py-2 rounded-lg ${
+                          dataSourceFilter === 'indicador'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Indicadores
+                      </button>
+                      <button
+                        onClick={() => setDataSourceFilter('conta_dre')}
+                        className={`px-4 py-2 rounded-lg ${
+                          dataSourceFilter === 'conta_dre'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        Contas DRE
+                      </button>
+                    </div>
                   </div>
 
                   <div>
@@ -527,8 +587,7 @@ export const DashboardConfig = () => {
                                   ? formData.dados_vinculados.filter(d => d.id !== ref.id)
                                   : [...formData.dados_vinculados, {
                                       id: ref.id,
-                                      tipo: formData.tipo === 'categoria' ? 'categoria' : 
-                                            formData.tipo === 'indicador' ? 'indicador' : 'conta_dre',
+                                      tipo: dataSourceFilter === 'all' ? 'categoria' : dataSourceFilter,
                                       nome: ref.name
                                     }]
                               });
@@ -543,7 +602,9 @@ export const DashboardConfig = () => {
                     </div>
                   </div>
                 </>
-              ) : (
+              )}
+
+              {formData.tipo !== 'grafico' && (
                 <div>
                   {formData.tipo === 'categoria' && (
                     <div className="flex gap-2 mb-4">

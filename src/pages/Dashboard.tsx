@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Circle, ArrowUp, ArrowDown } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface Company {
   id: string;
@@ -152,7 +152,6 @@ export const Dashboard = () => {
     year: number,
     processedIndicators: Set<string> = new Set()
   ): Promise<number> => {
-    // Prevent infinite recursion
     if (processedIndicators.has(indicatorId)) {
       console.warn('Circular reference detected in indicator:', indicatorId);
       return 0;
@@ -160,7 +159,6 @@ export const Dashboard = () => {
     processedIndicators.add(indicatorId);
 
     try {
-      // Get indicator configuration
       const { data: indicators, error: indicatorError } = await supabase
         .from('indicators')
         .select('*')
@@ -171,19 +169,16 @@ export const Dashboard = () => {
         return 0;
       }
 
-      // Handle case where no indicator is found
       if (!indicators || indicators.length === 0) {
         console.warn(`No indicator found with id: ${indicatorId}`);
         return 0;
       }
 
-      // Use the first indicator if multiple are returned (shouldn't happen with proper data)
       const indicator = indicators[0];
       if (indicators.length > 1) {
         console.warn(`Multiple indicators found with id: ${indicatorId}, using first one`);
       }
 
-      // For manual indicators, get the value directly
       if (indicator.type === 'manual') {
         const { data: values } = await supabase
           .from('dados_brutos')
@@ -196,7 +191,6 @@ export const Dashboard = () => {
         return values?.[0]?.valor || 0;
       }
 
-      // For calculated indicators, process each source
       let result = 0;
       const sourceIds = indicator.source_ids || [];
 
@@ -204,7 +198,6 @@ export const Dashboard = () => {
         let sourceValue = 0;
 
         if (indicator.calculation_type === 'category') {
-          // Get category value
           const { data: values } = await supabase
             .from('dados_brutos')
             .select('valor, categories!inner(type)')
@@ -217,11 +210,9 @@ export const Dashboard = () => {
             sourceValue = values[0].categories.type === 'expense' ? -values[0].valor : values[0].valor;
           }
         } else {
-          // Recursively calculate indicator value
           sourceValue = await calculateIndicatorValue(sourceId, month, year, processedIndicators);
         }
 
-        // Apply operation
         if (result === 0) {
           result = sourceValue;
         } else {
@@ -266,7 +257,7 @@ export const Dashboard = () => {
       if (configError) throw configError;
 
       const processedItems = await Promise.all((configData || []).map(async (item) => {
-        if (item.tipo === 'grafico' && item.ordem === 4) { // Chart is 5th item (index 4)
+        if (item.tipo === 'grafico' && item.ordem === 4) {
           const chartData: { [key: string]: { [key: string]: number } } = {};
 
           await Promise.all(item.dados_vinculados?.map(async (vinculado) => {
@@ -309,7 +300,6 @@ export const Dashboard = () => {
         let previousValue = 0;
 
         if (item.tipo === 'categoria') {
-          // Get current month value for categories
           const { data: currentData } = await supabase
             .from('dados_brutos')
             .select('valor, categories!inner(type)')
@@ -322,7 +312,6 @@ export const Dashboard = () => {
             return sum + (d.categories.type === 'expense' ? -d.valor : d.valor);
           }, 0) || 0;
 
-          // Get previous month value
           const prevMonth = months[1];
           const { data: previousData } = await supabase
             .from('dados_brutos')
@@ -336,14 +325,12 @@ export const Dashboard = () => {
             return sum + (d.categories.type === 'expense' ? -d.valor : d.valor);
           }, 0) || 0;
         } else if (item.tipo === 'indicador') {
-          // Calculate current month value for indicators
           currentValue = await Promise.all(
             item.referencias_ids.map(id => 
               calculateIndicatorValue(id, selectedMonth, selectedYear)
             )
           ).then(values => values.reduce((sum, value) => sum + value, 0));
 
-          // Calculate previous month value
           const prevMonth = months[1];
           previousValue = await Promise.all(
             item.referencias_ids.map(id => 
@@ -401,6 +388,43 @@ export const Dashboard = () => {
       color: item.cor_resultado
     }));
 
+    if (item.tipo_grafico === 'barra') {
+      return (
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis 
+              dataKey="name" 
+              stroke="#9CA3AF"
+              tick={{ fill: '#9CA3AF' }}
+            />
+            <YAxis 
+              stroke="#9CA3AF"
+              tick={{ fill: '#9CA3AF' }}
+              tickFormatter={(value) => formatCurrency(value)}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: '#1F2937',
+                border: '1px solid #374151',
+                borderRadius: '0.5rem'
+              }}
+              labelStyle={{ color: '#9CA3AF' }}
+              formatter={(value: number) => formatCurrency(value)}
+            />
+            {lines?.map((line) => (
+              <Bar
+                key={line.name}
+                dataKey={line.name}
+                fill={line.color}
+                opacity={0.8}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      );
+    }
+
     return (
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>
@@ -424,7 +448,7 @@ export const Dashboard = () => {
             labelStyle={{ color: '#9CA3AF' }}
             formatter={(value: number) => formatCurrency(value)}
           />
-          {lines?.map((line, index) => (
+          {lines?.map((line) => (
             <Line
               key={line.name}
               type="monotone"
@@ -446,7 +470,6 @@ export const Dashboard = () => {
 
     return (
       <div className="space-y-6">
-        {/* Top Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, index) => {
             const item = topCards[index];
@@ -491,7 +514,6 @@ export const Dashboard = () => {
           })}
         </div>
 
-        {/* Main Chart */}
         <div className="bg-zinc-800 rounded-xl p-6">
           {mainChart ? (
             <div>
@@ -507,7 +529,6 @@ export const Dashboard = () => {
           )}
         </div>
 
-        {/* Bottom Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {Array.from({ length: 2 }).map((_, index) => {
             const item = bottomCards[index];
