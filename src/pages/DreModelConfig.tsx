@@ -27,6 +27,7 @@ interface DreComponente {
   referencia_id: string;
   peso: number;
   ordem: number;
+  nome_exibicao: string | null;
 }
 
 interface Referencia {
@@ -63,7 +64,6 @@ export const DreModelConfig = () => {
   const [editingComponente, setEditingComponente] = useState<DreComponente | null>(null);
   const [selectedContaSecundariaId, setSelectedContaSecundariaId] = useState<string | null>(null);
 
-  // Form states
   const [formData, setFormData] = useState({
     nome: '',
     tipo: 'simples' as DreConta['tipo'],
@@ -82,7 +82,8 @@ export const DreModelConfig = () => {
     referencia_tipo: 'categoria' as DreComponente['referencia_tipo'],
     referencia_id: '',
     peso: 1,
-    ordem: 0
+    ordem: 0,
+    nome_exibicao: ''
   });
 
   useEffect(() => {
@@ -264,7 +265,8 @@ export const DreModelConfig = () => {
         referencia_tipo: componenteData.referencia_tipo,
         referencia_id: componenteData.referencia_id,
         peso: componenteData.peso,
-        ordem: componenteData.ordem
+        ordem: componenteData.ordem,
+        nome_exibicao: componenteData.nome_exibicao || null
       };
 
       if (editingComponente) {
@@ -289,7 +291,8 @@ export const DreModelConfig = () => {
         referencia_tipo: 'categoria',
         referencia_id: '',
         peso: 1,
-        ordem: 0
+        ordem: 0,
+        nome_exibicao: ''
       });
       setSuccess('Componente salvo com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
@@ -482,10 +485,11 @@ export const DreModelConfig = () => {
                   .map(componente => (
                     <div key={componente.id} className="bg-zinc-800/50 p-3 rounded-lg flex items-center justify-between">
                       <span className="text-zinc-300">
-                        {componente.referencia_tipo === 'categoria' && 
-                          categorias.find(c => c.id === componente.referencia_id)?.nome}
-                        {componente.referencia_tipo === 'indicador' && 
-                          indicadores.find(i => i.id === componente.referencia_id)?.nome}
+                        {componente.nome_exibicao || (
+                          componente.referencia_tipo === 'categoria' ?
+                            categorias.find(c => c.id === componente.referencia_id)?.nome :
+                            indicadores.find(i => i.id === componente.referencia_id)?.nome
+                        )}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -495,7 +499,8 @@ export const DreModelConfig = () => {
                               referencia_tipo: componente.referencia_tipo,
                               referencia_id: componente.referencia_id,
                               peso: componente.peso,
-                              ordem: componente.ordem
+                              ordem: componente.ordem,
+                              nome_exibicao: componente.nome_exibicao || ''
                             });
                             setShowComponenteModal(true);
                           }}
@@ -561,10 +566,11 @@ export const DreModelConfig = () => {
                           .map(componente => (
                             <div key={componente.id} className="bg-zinc-800/30 p-2 rounded-lg flex items-center justify-between">
                               <span className="text-zinc-400">
-                                {componente.referencia_tipo === 'categoria' && 
-                                  categorias.find(c => c.id === componente.referencia_id)?.nome}
-                                {componente.referencia_tipo === 'indicador' && 
-                                  indicadores.find(i => i.id === componente.referencia_id)?.nome}
+                                {componente.nome_exibicao || (
+                                  componente.referencia_tipo === 'categoria' ?
+                                    categorias.find(c => c.id === componente.referencia_id)?.nome :
+                                    indicadores.find(i => i.id === componente.referencia_id)?.nome
+                                )}
                               </span>
                               <div className="flex items-center gap-2">
                                 <button
@@ -574,7 +580,8 @@ export const DreModelConfig = () => {
                                       referencia_tipo: componente.referencia_tipo,
                                       referencia_id: componente.referencia_id,
                                       peso: componente.peso,
-                                      ordem: componente.ordem
+                                      ordem: componente.ordem,
+                                      nome_exibicao: componente.nome_exibicao || ''
                                     });
                                     setSelectedContaSecundariaId(contaSecundaria.id);
                                     setShowComponenteModal(true);
@@ -785,6 +792,7 @@ export const DreModelConfig = () => {
                   setShowSecundariaModal(false);
                   setEditingContaSecundaria(null);
                   setSecundariaData({
+                    
                     nome: '',
                     ordem: 0,
                     empresa_ids: []
@@ -822,7 +830,8 @@ export const DreModelConfig = () => {
                     referencia_tipo: 'categoria',
                     referencia_id: '',
                     peso: 1,
-                    ordem: 0
+                    ordem: 0,
+                    nome_exibicao: ''
                   });
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
@@ -878,6 +887,22 @@ export const DreModelConfig = () => {
 
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Nome de Exibição (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={componenteData.nome_exibicao}
+                  onChange={(e) => setComponenteData({
+                    ...componenteData,
+                    nome_exibicao: e.target.value
+                  })}
+                  placeholder="Nome personalizado para exibição"
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
                   Peso
                 </label>
                 <input
@@ -917,7 +942,8 @@ export const DreModelConfig = () => {
                     referencia_tipo: 'categoria',
                     referencia_id: '',
                     peso: 1,
-                    ordem: 0
+                    ordem: 0,
+                    nome_exibicao: ''
                   });
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"

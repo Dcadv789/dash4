@@ -8,7 +8,6 @@ import {
   Receipt,
   Menu,
   CircuitBoard,
-  Settings,
 } from 'lucide-react';
 import { NavLink } from './NavLink';
 import { useLocation } from 'react-router-dom';
@@ -68,12 +67,6 @@ export const Sidebar = () => {
             text="DRE" 
             active={location.pathname === '/dre'}
             href="/dre"
-          />
-          <NavLink 
-            icon={Settings} 
-            text="DRE Config" 
-            active={location.pathname === '/dre-config'}
-            href="/dre-config"
           />
         </nav>
       </div>

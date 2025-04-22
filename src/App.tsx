@@ -55,7 +55,7 @@ function App() {
           <Route path="/indicators" element={<PrivateRoute><Indicators /></PrivateRoute>} />
           <Route path="/raw-data" element={<PrivateRoute><RawData /></PrivateRoute>} />
           <Route path="/dre" element={<PrivateRoute><DREVisualizacao /></PrivateRoute>} />
-          <Route path="/dre-config" element={<PrivateRoute><DreModelConfig /></PrivateRoute>} />
+          <Route path="/dre-model-config" element={<PrivateRoute><DreModelConfig /></PrivateRoute>} />
           <Route path="/empresas-contas-dre" element={<PrivateRoute><EmpresasContasDRE /></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute>
             <div className="max-w-7xl mx-auto">
