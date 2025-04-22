@@ -27,6 +27,7 @@ const OPERATION_LABELS = {
 export const Indicators = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [companyIndicators, setCompanyIndicators] = useState<CompanyIndicator[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -38,10 +39,30 @@ export const Indicators = () => {
   const [showIndicatorModal, setShowIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
 
+  // Form state
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    password: '',
+    company_id: '',
+    role: 'colab' as const,
+    is_active: true
+  });
+
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'manual' as 'manual' | 'calculated',
+    calculation_type: 'category' as 'category' | 'indicator',
+    operation: 'sum' as 'sum' | 'subtract' | 'multiply' | 'divide',
+    source_ids: [] as string[],
+    is_active: true
+  });
+
   useEffect(() => {
     fetchCompanies();
     fetchIndicators();
     fetchCompanyIndicators();
+    fetchCategories();
   }, []);
 
   const fetchCompanies = async () => {
@@ -57,6 +78,21 @@ export const Indicators = () => {
     } catch (err) {
       console.error('Erro ao carregar empresas:', err);
       setError('Erro ao carregar empresas');
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('code');
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar categorias:', err);
+      setError('Erro ao carregar categorias');
     }
   };
 
@@ -116,6 +152,14 @@ export const Indicators = () => {
         operation: null,
         source_ids: []
       });
+      setFormData({
+        name: 'Novo Indicador',
+        type: 'manual',
+        calculation_type: 'category',
+        operation: 'sum',
+        source_ids: [],
+        is_active: true
+      });
       setShowIndicatorModal(true);
     } catch (err) {
       console.error('Erro ao criar indicador:', err);
@@ -127,18 +171,20 @@ export const Indicators = () => {
     if (!editingIndicator) return;
 
     try {
+      const payload = {
+        name: formData.name,
+        type: formData.type,
+        calculation_type: formData.type === 'calculated' ? formData.calculation_type : null,
+        operation: formData.type === 'calculated' ? formData.operation : null,
+        source_ids: formData.type === 'calculated' ? formData.source_ids : [],
+        is_active: formData.is_active
+      };
+
       if (editingIndicator.id) {
         // Atualizar indicador existente
         const { error } = await supabase
           .from('indicators')
-          .update({
-            name: editingIndicator.name,
-            type: editingIndicator.type,
-            calculation_type: editingIndicator.calculation_type,
-            operation: editingIndicator.operation,
-            source_ids: editingIndicator.source_ids,
-            is_active: editingIndicator.is_active
-          })
+          .update(payload)
           .eq('id', editingIndicator.id);
 
         if (error) throw error;
@@ -147,13 +193,8 @@ export const Indicators = () => {
         const { data, error } = await supabase
           .from('indicators')
           .insert([{
-            code: editingIndicator.code,
-            name: editingIndicator.name,
-            type: editingIndicator.type,
-            calculation_type: editingIndicator.calculation_type,
-            operation: editingIndicator.operation,
-            source_ids: editingIndicator.source_ids,
-            is_active: editingIndicator.is_active
+            ...payload,
+            code: editingIndicator.code
           }])
           .select()
           .single();
@@ -164,6 +205,14 @@ export const Indicators = () => {
       await fetchIndicators();
       setShowIndicatorModal(false);
       setEditingIndicator(null);
+      setFormData({
+        name: '',
+        type: 'manual',
+        calculation_type: 'category',
+        operation: 'sum',
+        source_ids: [],
+        is_active: true
+      });
     } catch (err) {
       console.error('Erro ao salvar indicador:', err);
       setError('Erro ao salvar indicador');
@@ -258,16 +307,6 @@ export const Indicators = () => {
 
     return matchesCompany && matchesSearch && matchesType;
   });
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto py-8">
-        <div className="bg-zinc-900 rounded-xl p-8 text-center">
-          <p className="text-zinc-400">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -422,6 +461,14 @@ export const Indicators = () => {
                       <button
                         onClick={() => {
                           setEditingIndicator(indicator);
+                          setFormData({
+                            name: indicator.name,
+                            type: indicator.type,
+                            calculation_type: indicator.calculation_type || 'category',
+                            operation: indicator.operation || 'sum',
+                            source_ids: indicator.source_ids || [],
+                            is_active: indicator.is_active
+                          });
                           setShowIndicatorModal(true);
                         }}
                         className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
@@ -534,8 +581,8 @@ export const Indicators = () => {
                 </label>
                 <input
                   type="text"
-                  value={editingIndicator.name}
-                  onChange={(e) => setEditingIndicator({ ...editingIndicator, name: e.target.value })}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 />
               </div>
@@ -545,12 +592,13 @@ export const Indicators = () => {
                   Tipo
                 </label>
                 <select
-                  value={editingIndicator.type}
-                  onChange={(e) => setEditingIndicator({
-                    ...editingIndicator,
+                  value={formData.type}
+                  onChange={(e) => setFormData({
+                    ...formData,
                     type: e.target.value as 'manual' | 'calculated',
-                    calculation_type: e.target.value === 'manual' ? null : 'category',
-                    operation: e.target.value === 'manual' ? null : 'sum'
+                    calculation_type: e.target.value === 'manual' ? 'category' : formData.calculation_type,
+                    operation: e.target.value === 'manual' ? 'sum' : formData.operation,
+                    source_ids: []
                   })}
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 >
@@ -559,17 +607,18 @@ export const Indicators = () => {
                 </select>
               </div>
 
-              {editingIndicator.type === 'calculated' && (
+              {formData.type === 'calculated' && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-zinc-400 mb-1">
                       Tipo de Cálculo
                     </label>
                     <select
-                      value={editingIndicator.calculation_type || 'category'}
-                      onChange={(e) => setEditingIndicator({
-                        ...editingIndicator,
-                        calculation_type: e.target.value as 'category' | 'indicator'
+                      value={formData.calculation_type}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        calculation_type: e.target.value as 'category' | 'indicator',
+                        source_ids: []
                       })}
                       className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                     >
@@ -583,9 +632,9 @@ export const Indicators = () => {
                       Operação
                     </label>
                     <select
-                      value={editingIndicator.operation || 'sum'}
-                      onChange={(e) => setEditingIndicator({
-                        ...editingIndicator,
+                      value={formData.operation}
+                      onChange={(e) => setFormData({
+                        ...formData,
                         operation: e.target.value as 'sum' | 'subtract' | 'multiply' | 'divide'
                       })}
                       className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
@@ -595,6 +644,68 @@ export const Indicators = () => {
                       ))}
                     </select>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      {formData.calculation_type === 'category' ? 'Categorias' : 'Indicadores'}
+                    </label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                      {formData.calculation_type === 'category' ? (
+                        categories.map(category => (
+                          <label
+                            key={category.id}
+                            className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.source_ids.includes(category.id)}
+                              onChange={() => {
+                                const newIds = formData.source_ids.includes(category.id)
+                                  ? formData.source_ids.filter(id => id !== category.id)
+                                  : [...formData.source_ids, category.id];
+                                setFormData({ ...formData, source_ids: newIds });
+                              }}
+                              className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                            />
+                            <span className="text-zinc-300">
+                              {category.code} - {category.name}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ml-auto ${
+                              category.type === 'revenue' 
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {category.type === 'revenue' ? 'Receita' : 'Despesa'}
+                            </span>
+                          </label>
+                        ))
+                      ) : (
+                        indicators
+                          .filter(ind => ind.id !== editingIndicator.id)
+                          .map(indicator => (
+                            <label
+                              key={indicator.id}
+                              className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.source_ids.includes(indicator.id)}
+                                onChange={() => {
+                                  const newIds = formData.source_ids.includes(indicator.id)
+                                    ? formData.source_ids.filter(id => id !== indicator.id)
+                                    : [...formData.source_ids, indicator.id];
+                                  setFormData({ ...formData, source_ids: newIds });
+                                }}
+                                className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                              />
+                              <span className="text-zinc-300">
+                                {indicator.code} - {indicator.name}
+                              </span>
+                            </label>
+                          ))
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -602,9 +713,9 @@ export const Indicators = () => {
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={editingIndicator.is_active}
-                    onChange={(e) => setEditingIndicator({
-                      ...editingIndicator,
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({
+                      ...formData,
                       is_active: e.target.checked
                     })}
                     className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
@@ -626,7 +737,8 @@ export const Indicators = () => {
               </button>
               <button
                 onClick={handleSaveIndicator}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+                disabled={!formData.name || (formData.type === 'calculated' && formData.source_ids.length === 0)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Salvar
               </button>
