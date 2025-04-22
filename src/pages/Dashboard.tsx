@@ -19,7 +19,7 @@ interface SystemUser {
 interface DashboardItem {
   id: string;
   titulo_personalizado: string;
-  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico';
+  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico' | 'top_lista';
   referencias_ids: string[];
   ordem: number;
   cor_resultado: string;
@@ -30,6 +30,7 @@ interface DashboardItem {
     tipo: 'categoria' | 'indicador' | 'conta_dre';
     nome: string;
   }[];
+  top_limit?: number;
   monthlyValues?: { [key: string]: number };
 }
 
@@ -463,6 +464,55 @@ export const Dashboard = () => {
     );
   };
 
+  const renderTopList = (item: DashboardItem, months: { month: string; year: number }[]) => {
+    const monthlyData: { [key: string]: { name: string; value: number }[] } = {};
+    
+    months.forEach(({ month, year }) => {
+      const monthKey = `${month}-${year}`;
+      const values = item.dados_vinculados?.map(vinculado => ({
+        name: vinculado.nome,
+        value: vinculado.monthlyValues?.[monthKey] || 0
+      })) || [];
+      
+      monthlyData[monthKey] = values
+        .sort((a, b) => b.value - a.value)
+        .slice(0, item.top_limit || 5);
+    });
+
+    return (
+      <div className="space-y-6">
+        {months.map(({ month, year }) => {
+          const monthKey = `${month}-${year}`;
+          const values = monthlyData[monthKey];
+
+          return (
+            <div key={monthKey} className="bg-zinc-800/50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-zinc-400 mb-3">
+                {month}/{year}
+              </h4>
+              <div className="space-y-2">
+                {values.map((item, index) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between p-2 bg-zinc-800/30 rounded"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500 text-sm">#{index + 1}</span>
+                      <span className="text-zinc-200">{item.name}</span>
+                    </div>
+                    <span className="text-zinc-300 font-mono">
+                      {formatCurrency(item.value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderCards = () => {
     const topCards = items.filter(item => item.ordem <= 3);
     const mainChart = items.find(item => item.ordem === 4);
@@ -520,11 +570,19 @@ export const Dashboard = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-medium text-zinc-300">{mainChart.titulo_personalizado}</h3>
               </div>
-              {renderChart(mainChart)}
+              {mainChart.tipo === 'grafico' ? (
+                renderChart(mainChart)
+              ) : mainChart.tipo === 'top_lista' ? (
+                renderTopList(mainChart, getLast12Months())
+              ) : (
+                <div className="flex items-center justify-center h-[400px]">
+                  <p className="text-zinc-500">Tipo de visualização não suportado</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-center h-[400px]">
-              <p className="text-zinc-500">Aguardando configuração do gráfico...</p>
+              <p className="text-zinc-500">Aguardando configuração...</p>
             </div>
           )}
         </div>

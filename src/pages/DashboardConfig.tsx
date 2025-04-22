@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, PencilIcon, Trash2, Save, X, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, PencilIcon, Trash2, Save, X, Eye, BarChart2, ArrowUp, ArrowDown, List } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DashboardItem {
@@ -7,7 +7,7 @@ interface DashboardItem {
   empresa_id: string;
   ordem: number;
   titulo_personalizado: string;
-  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico';
+  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico' | 'top_lista';
   referencias_ids: string[];
   is_active: boolean;
   cor_resultado: string;
@@ -17,6 +17,7 @@ interface DashboardItem {
     tipo: 'categoria' | 'indicador' | 'conta_dre';
     nome: string;
   }[];
+  top_limit?: number;
 }
 
 interface Company {
@@ -59,7 +60,8 @@ export const DashboardConfig = () => {
     is_active: true,
     cor_resultado: '#44FF44',
     tipo_grafico: 'linha' as 'linha' | 'barra' | 'pizza',
-    dados_vinculados: [] as { id: string; tipo: 'categoria' | 'indicador' | 'conta_dre'; nome: string; }[]
+    dados_vinculados: [] as { id: string; tipo: 'categoria' | 'indicador' | 'conta_dre'; nome: string; }[],
+    top_limit: 5
   });
 
   useEffect(() => {
@@ -151,11 +153,12 @@ export const DashboardConfig = () => {
         ordem: editingItem ? editingItem.ordem : items.length,
         titulo_personalizado: formData.titulo_personalizado,
         tipo: formData.tipo,
-        referencias_ids: formData.tipo === 'grafico' ? [] : formData.referencias_ids,
+        referencias_ids: formData.tipo === 'grafico' || formData.tipo === 'top_lista' ? [] : formData.referencias_ids,
         is_active: formData.is_active,
         cor_resultado: formData.cor_resultado,
         tipo_grafico: formData.tipo === 'grafico' ? formData.tipo_grafico : null,
-        dados_vinculados: formData.tipo === 'grafico' ? formData.dados_vinculados : null
+        dados_vinculados: (formData.tipo === 'grafico' || formData.tipo === 'top_lista') ? formData.dados_vinculados : null,
+        top_limit: formData.tipo === 'top_lista' ? formData.top_limit : null
       };
 
       if (editingItem) {
@@ -184,7 +187,8 @@ export const DashboardConfig = () => {
         is_active: true,
         cor_resultado: '#44FF44',
         tipo_grafico: 'linha',
-        dados_vinculados: []
+        dados_vinculados: [],
+        top_limit: 5
       });
       setSuccess('Item salvo com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
@@ -225,7 +229,7 @@ export const DashboardConfig = () => {
     }
     if (formData.tipo === 'indicador') return indicators;
     if (formData.tipo === 'conta_dre') return dreAccounts;
-    if (formData.tipo === 'grafico') {
+    if (formData.tipo === 'grafico' || formData.tipo === 'top_lista') {
       let refs = [];
       if (dataSourceFilter === 'all' || dataSourceFilter === 'categoria') {
         refs = [...refs, ...categories];
@@ -320,6 +324,7 @@ export const DashboardConfig = () => {
                     {item.tipo === 'conta_dre' && 'Conta DRE'}
                     {item.tipo === 'custom_sum' && 'Soma Personalizada'}
                     {item.tipo === 'grafico' && `Gráfico (${item.tipo_grafico})`}
+                    {item.tipo === 'top_lista' && `Top ${item.top_limit} Lista`}
                   </p>
                 </div>
               </div>
@@ -345,21 +350,22 @@ export const DashboardConfig = () => {
                       is_active: item.is_active,
                       cor_resultado: item.cor_resultado,
                       tipo_grafico: item.tipo_grafico || 'linha',
-                      dados_vinculados: item.dados_vinculados || []
+                      dados_vinculados: item.dados_vinculados || [],
+                      top_limit: item.top_limit || 5
                     });
                     setShowModal(true);
                   }}
                   className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
                   title="Editar"
                 >
-                  <Save size={16} />
+                  <PencilIcon size={16} />
                 </button>
                 <button
                   onClick={() => handleDelete(item.id)}
                   className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-400"
                   title="Excluir"
                 >
-                  <X size={16} />
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
@@ -367,7 +373,6 @@ export const DashboardConfig = () => {
         ))}
       </div>
 
-      {/* Modal de Visualização */}
       {showViewModal && viewingItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
@@ -387,7 +392,7 @@ export const DashboardConfig = () => {
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {viewingItem.tipo === 'grafico' ? (
+              {(viewingItem.tipo === 'grafico' || viewingItem.tipo === 'top_lista') ? (
                 viewingItem.dados_vinculados?.map(item => (
                   <div
                     key={item.id}
@@ -433,7 +438,6 @@ export const DashboardConfig = () => {
         </div>
       )}
 
-      {/* Modal de Edição/Criação */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
@@ -453,7 +457,8 @@ export const DashboardConfig = () => {
                     is_active: true,
                     cor_resultado: '#44FF44',
                     tipo_grafico: 'linha',
-                    dados_vinculados: []
+                    dados_vinculados: [],
+                    top_limit: 5
                   });
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
@@ -495,6 +500,7 @@ export const DashboardConfig = () => {
                   <option value="conta_dre">Conta DRE</option>
                   <option value="custom_sum">Soma Personalizada</option>
                   <option value="grafico">Gráfico</option>
+                  <option value="top_lista">Top Lista</option>
                 </select>
               </div>
 
@@ -604,7 +610,64 @@ export const DashboardConfig = () => {
                 </>
               )}
 
-              {formData.tipo !== 'grafico' && (
+              {formData.tipo === 'top_lista' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      Limite de Itens
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.top_limit}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        top_limit: parseInt(e.target.value) || 5
+                      })}
+                      min={1}
+                      max={20}
+                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-1">
+                      Selecionar Dados
+                    </label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                      {getFilteredReferences().map(ref => (
+                        <label
+                          key={ref.id}
+                          className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.dados_vinculados.some(d => d.id === ref.id)}
+                            onChange={() => {
+                              const isSelected = formData.dados_vinculados.some(d => d.id === ref.id);
+                              setFormData({
+                                ...formData,
+                                dados_vinculados: isSelected
+                                  ? formData.dados_vinculados.filter(d => d.id !== ref.id)
+                                  : [...formData.dados_vinculados, {
+                                      id: ref.id,
+                                      tipo: dataSourceFilter === 'all' ? 'categoria' : dataSourceFilter,
+                                      nome: ref.name
+                                    }]
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                          />
+                          <span className="text-zinc-300">
+                            {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {formData.tipo !== 'grafico' && formData.tipo !== 'top_lista' && (
                 <div>
                   {formData.tipo === 'categoria' && (
                     <div className="flex gap-2 mb-4">
@@ -739,7 +802,8 @@ export const DashboardConfig = () => {
                     is_active: true,
                     cor_resultado: '#44FF44',
                     tipo_grafico: 'linha',
-                    dados_vinculados: []
+                    dados_vinculados: [],
+                    top_limit: 5
                   });
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
@@ -749,9 +813,9 @@ export const DashboardConfig = () => {
               <button
                 onClick={handleSave}
                 disabled={!formData.titulo_personalizado || (
-                  formData.tipo !== 'grafico' && !formData.referencias_ids.length
+                  formData.tipo !== 'grafico' && formData.tipo !== 'top_lista' && !formData.referencias_ids.length
                 ) || (
-                  formData.tipo === 'grafico' && !formData.dados_vinculados.length
+                  (formData.tipo === 'grafico' || formData.tipo === 'top_lista') && !formData.dados_vinculados.length
                 )}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
