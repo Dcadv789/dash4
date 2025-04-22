@@ -186,6 +186,7 @@ export const Dashboard = () => {
         let currentValue = 0;
         let previousValue = 0;
 
+        // Buscar dados do mês atual
         const { data: currentData } = await supabase
           .from('dados_brutos')
           .select('valor')
@@ -196,6 +197,7 @@ export const Dashboard = () => {
 
         currentValue = currentData?.reduce((sum, d) => sum + d.valor, 0) || 0;
 
+        // Buscar dados do mês anterior
         const prevMonth = months[1];
         const { data: previousData } = await supabase
           .from('dados_brutos')
