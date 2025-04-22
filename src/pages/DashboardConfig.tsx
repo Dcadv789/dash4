@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye, BarChart2 } from 'lucide-react';
+import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -60,6 +60,48 @@ export const DashboardConfig = () => {
     tipo_grafico: 'linha' as 'linha' | 'barra' | 'pizza',
     dados_vinculados: [] as { id: string; tipo: 'categoria' | 'indicador' | 'conta_dre'; nome: string; }[]
   });
+
+  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
+    const currentIndex = items.findIndex(item => item.id === itemId);
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= items.length) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Call the reorder function in Supabase
+      const { error } = await supabase.rpc('reorder_dashboard_items', {
+        p_empresa_id: selectedCompanyId,
+        p_item_id: itemId,
+        p_nova_ordem: newIndex
+      });
+
+      if (error) throw error;
+
+      // Update local state
+      const newItems = [...items];
+      const [movedItem] = newItems.splice(currentIndex, 1);
+      newItems.splice(newIndex, 0, movedItem);
+
+      // Update ordem values sequentially
+      const updatedItems = newItems.map((item, index) => ({
+        ...item,
+        ordem: index
+      }));
+
+      setItems(updatedItems);
+      setSuccess('Ordem atualizada com sucesso!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Erro ao reordenar itens:', err);
+      setError('Erro ao reordenar itens');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchCompanies();
@@ -215,35 +257,6 @@ export const DashboardConfig = () => {
     }
   };
 
-  const handleDragEnd = async (result: any) => {
-    if (!result.destination) return;
-
-    const newItems = Array.from(items);
-    const [reorderedItem] = newItems.splice(result.source.index, 1);
-    newItems.splice(result.destination.index, 0, reorderedItem);
-
-    try {
-      setLoading(true);
-
-      // Chamar a função de reordenação
-      const { error } = await supabase.rpc('reorder_dashboard_items', {
-        p_empresa_id: selectedCompanyId,
-        p_item_id: reorderedItem.id,
-        p_nova_ordem: result.destination.index
-      });
-
-      if (error) throw error;
-
-      // Atualizar a lista local
-      await fetchItems();
-    } catch (err) {
-      console.error('Erro ao atualizar ordem:', err);
-      setError('Erro ao atualizar ordem dos itens');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getFilteredReferences = () => {
     if (formData.tipo === 'categoria') {
       return categories.filter(cat => {
@@ -311,113 +324,84 @@ export const DashboardConfig = () => {
         </div>
       </div>
 
-      {selectedCompanyId && (
-        <div className="space-y-4">
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="dashboard-items">
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-4"
-                >
-                  {items.map((item, index) => (
-                    <Draggable
-                      key={item.id}
-                      draggableId={item.id}
-                      index={index}
-                    >
-                      {(provided) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          className="bg-zinc-900 rounded-xl p-6"
-                        >
-                          <div className="flex items-start gap-4">
-                            <div
-                              {...provided.dragHandleProps}
-                              className="p-2 hover:bg-zinc-800 rounded-lg cursor-move"
-                            >
-                              <GripVertical size={20} className="text-zinc-400" />
-                            </div>
-
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h3 className="text-lg font-medium text-zinc-100">
-                                    {item.titulo_personalizado || `Item ${index + 1}`}
-                                  </h3>
-                                  <div className="flex items-center gap-4 mt-1">
-                                    <p className="text-sm text-zinc-400">
-                                      {item.tipo === 'categoria' && 'Soma de Categorias'}
-                                      {item.tipo === 'indicador' && 'Indicador'}
-                                      {item.tipo === 'conta_dre' && 'Conta DRE'}
-                                      {item.tipo === 'custom_sum' && 'Soma Personalizada'}
-                                      {item.tipo === 'grafico' && 'Gráfico'}
-                                    </p>
-                                    <span className="text-sm text-zinc-500">
-                                      Ordem: {item.ordem + 1}
-                                    </span>
-                                    {item.tipo === 'grafico' && (
-                                      <span className="text-sm text-zinc-500">
-                                        Tipo: {item.tipo_grafico}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setViewingItem(item);
-                                      setShowViewModal(true);
-                                    }}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
-                                    title="Ver Itens"
-                                  >
-                                    <Eye size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingItem(item);
-                                      setFormData({
-                                        titulo_personalizado: item.titulo_personalizado,
-                                        tipo: item.tipo,
-                                        referencias_ids: item.referencias_ids,
-                                        ordem: item.ordem,
-                                        is_active: item.is_active,
-                                        cor_resultado: item.cor_resultado,
-                                        tipo_grafico: item.tipo_grafico || 'linha',
-                                        dados_vinculados: item.dados_vinculados || []
-                                      });
-                                      setShowModal(true);
-                                    }}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
-                                    title="Editar"
-                                  >
-                                    <Save size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete(item.id)}
-                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-400"
-                                    title="Excluir"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
+      <div className="space-y-4">
+        {items.map((item, index) => (
+          <div key={item.id} className="bg-zinc-900 rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <span className="text-zinc-500 font-mono">#{item.ordem + 1}</span>
+                <div>
+                  <h3 className="text-lg font-medium text-zinc-100">
+                    {item.titulo_personalizado}
+                  </h3>
+                  <p className="text-sm text-zinc-400">
+                    {item.tipo === 'categoria' && 'Soma de Categorias'}
+                    {item.tipo === 'indicador' && 'Indicador'}
+                    {item.tipo === 'conta_dre' && 'Conta DRE'}
+                    {item.tipo === 'custom_sum' && 'Soma Personalizada'}
+                    {item.tipo === 'grafico' && `Gráfico (${item.tipo_grafico})`}
+                  </p>
                 </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-        </div>
-      )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleMoveItem(item.id, 'up')}
+                  disabled={index === 0}
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Mover para cima"
+                >
+                  <ArrowUp size={16} />
+                </button>
+                <button
+                  onClick={() => handleMoveItem(item.id, 'down')}
+                  disabled={index === items.length - 1}
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Mover para baixo"
+                >
+                  <ArrowDown size={16} />
+                </button>
+                <button
+                  onClick={() => {
+                    setViewingItem(item);
+                    setShowViewModal(true);
+                  }}
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
+                  title="Ver Itens"
+                >
+                  <Eye size={16} />
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingItem(item);
+                    setFormData({
+                      titulo_personalizado: item.titulo_personalizado,
+                      tipo: item.tipo,
+                      referencias_ids: item.referencias_ids,
+                      ordem: item.ordem,
+                      is_active: item.is_active,
+                      cor_resultado: item.cor_resultado,
+                      tipo_grafico: item.tipo_grafico || 'linha',
+                      dados_vinculados: item.dados_vinculados || []
+                    });
+                    setShowModal(true);
+                  }}
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
+                  title="Editar"
+                >
+                  <Save size={16} />
+                </button>
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-400"
+                  title="Excluir"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Modal de Visualização */}
       {showViewModal && viewingItem && (
