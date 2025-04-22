@@ -72,27 +72,40 @@ export const DashboardConfig = () => {
       setLoading(true);
       setError(null);
 
-      // Call the reorder function in Supabase
-      const { error } = await supabase.rpc('reorder_dashboard_items', {
-        p_empresa_id: selectedCompanyId,
-        p_item_id: itemId,
-        p_nova_ordem: newIndex
-      });
+      const currentItem = items[currentIndex];
+      const targetItem = items[newIndex];
 
-      if (error) throw error;
+      // First, set current item's order to a temporary value
+      const { error: tempError } = await supabase
+        .from('dashboard_visual_config')
+        .update({ ordem: -1 })
+        .eq('id', currentItem.id);
+
+      if (tempError) throw tempError;
+
+      // Second, update target item's order
+      const { error: targetError } = await supabase
+        .from('dashboard_visual_config')
+        .update({ ordem: currentItem.ordem })
+        .eq('id', targetItem.id);
+
+      if (targetError) throw targetError;
+
+      // Finally, set current item to target's original order
+      const { error: finalError } = await supabase
+        .from('dashboard_visual_config')
+        .update({ ordem: targetItem.ordem })
+        .eq('id', currentItem.id);
+
+      if (finalError) throw finalError;
 
       // Update local state
       const newItems = [...items];
-      const [movedItem] = newItems.splice(currentIndex, 1);
-      newItems.splice(newIndex, 0, movedItem);
+      [newItems[currentIndex], newItems[newIndex]] = [newItems[newIndex], newItems[currentIndex]];
+      newItems[currentIndex].ordem = currentIndex;
+      newItems[newIndex].ordem = newIndex;
+      setItems(newItems);
 
-      // Update ordem values sequentially
-      const updatedItems = newItems.map((item, index) => ({
-        ...item,
-        ordem: index
-      }));
-
-      setItems(updatedItems);
       setSuccess('Ordem atualizada com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {

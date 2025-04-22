@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Circle, ArrowUp, ArrowDown } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Company {
   id: string;
@@ -15,6 +16,28 @@ interface SystemUser {
   has_all_companies_access: boolean;
 }
 
+interface DashboardItem {
+  id: string;
+  titulo_personalizado: string;
+  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum' | 'grafico';
+  referencias_ids: string[];
+  ordem: number;
+  cor_resultado: string;
+  valor: number;
+  tipo_grafico?: 'linha' | 'barra' | 'pizza';
+  dados_vinculados?: {
+    id: string;
+    tipo: 'categoria' | 'indicador' | 'conta_dre';
+    nome: string;
+  }[];
+  monthlyValues?: { [key: string]: number };
+}
+
+interface ChartData {
+  name: string;
+  [key: string]: string | number;
+}
+
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -26,16 +49,6 @@ const MONTH_ABBREVIATIONS: { [key: string]: string } = {
   'Julho': 'Jul', 'Agosto': 'Ago', 'Setembro': 'Set',
   'Outubro': 'Out', 'Novembro': 'Nov', 'Dezembro': 'Dez'
 };
-
-interface DashboardItem {
-  id: string;
-  titulo_personalizado: string;
-  tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum';
-  referencias_ids: string[];
-  ordem: number;
-  cor_resultado: string;
-  valor: number;
-}
 
 export const Dashboard = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -142,6 +155,34 @@ export const Dashboard = () => {
       if (configError) throw configError;
 
       const processedItems = await Promise.all((configData || []).map(async (item) => {
+        if (item.tipo === 'grafico' && item.ordem === 4) { // Chart is 5th item (index 4)
+          const chartData: { [key: string]: { [key: string]: number } } = {};
+
+          await Promise.all(item.dados_vinculados?.map(async (vinculado) => {
+            await Promise.all(months.map(async ({ month, year }) => {
+              const { data } = await supabase
+                .from('dados_brutos')
+                .select('valor')
+                .eq('empresa_id', selectedCompanyId)
+                .eq('ano', year)
+                .eq('mes', month)
+                .eq(vinculado.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', vinculado.id);
+
+              const value = data?.reduce((sum, d) => sum + d.valor, 0) || 0;
+              
+              if (!chartData[`${month}-${year}`]) {
+                chartData[`${month}-${year}`] = {};
+              }
+              chartData[`${month}-${year}`][vinculado.nome] = value;
+            }));
+          }) || []);
+
+          return {
+            ...item,
+            chartData
+          };
+        }
+
         let currentValue = 0;
         let previousValue = 0;
 
@@ -198,10 +239,65 @@ export const Dashboard = () => {
     };
   };
 
+  const renderChart = (item: DashboardItem) => {
+    if (!item.chartData) return null;
+
+    const months = getLast12Months();
+    const data: ChartData[] = months.map(({ month, year }) => {
+      const monthKey = `${month}-${year}`;
+      return {
+        name: `${MONTH_ABBREVIATIONS[month]}/${year.toString().slice(2)}`,
+        ...item.chartData[monthKey]
+      };
+    });
+
+    const lines = item.dados_vinculados?.map(vinculado => ({
+      name: vinculado.nome,
+      color: item.cor_resultado
+    }));
+
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis 
+            dataKey="name" 
+            stroke="#9CA3AF"
+            tick={{ fill: '#9CA3AF' }}
+          />
+          <YAxis 
+            stroke="#9CA3AF"
+            tick={{ fill: '#9CA3AF' }}
+            tickFormatter={(value) => formatCurrency(value)}
+          />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: '#1F2937',
+              border: '1px solid #374151',
+              borderRadius: '0.5rem'
+            }}
+            labelStyle={{ color: '#9CA3AF' }}
+            formatter={(value: number) => formatCurrency(value)}
+          />
+          {lines?.map((line, index) => (
+            <Line
+              key={line.name}
+              type="monotone"
+              dataKey={line.name}
+              stroke={line.color}
+              strokeWidth={2}
+              dot={false}
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  };
+
   const renderCards = () => {
-    const topCards = items.filter(item => item.ordem <= 4);
-    const mainChart = items.find(item => item.ordem === 5);
-    const bottomCards = items.filter(item => item.ordem > 5);
+    const topCards = items.filter(item => item.ordem <= 3);
+    const mainChart = items.find(item => item.ordem === 4);
+    const bottomCards = items.filter(item => item.ordem > 4);
 
     return (
       <div className="space-y-6">
@@ -251,14 +347,17 @@ export const Dashboard = () => {
         </div>
 
         {/* Main Chart */}
-        <div className="bg-zinc-800 rounded-xl p-6 h-[400px]">
+        <div className="bg-zinc-800 rounded-xl p-6">
           {mainChart ? (
-            <div className="flex items-center justify-center h-full">
-              <Circle className="text-zinc-400" size={32} style={{ color: mainChart.cor_resultado }} />
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium text-zinc-300">{mainChart.titulo_personalizado}</h3>
+              </div>
+              {renderChart(mainChart)}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-zinc-500">Gráfico será implementado em breve...</p>
+            <div className="flex items-center justify-center h-[400px]">
+              <p className="text-zinc-500">Aguardando configuração do gráfico...</p>
             </div>
           )}
         </div>
