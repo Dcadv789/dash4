@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, PencilIcon, Trash2, Save, X, Check, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, PencilIcon, Trash2, Save, X, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DashboardItem {
@@ -59,61 +59,6 @@ export const DashboardConfig = () => {
     tipo_grafico: 'linha' as 'linha' | 'barra' | 'pizza',
     dados_vinculados: [] as { id: string; tipo: 'categoria' | 'indicador' | 'conta_dre'; nome: string; }[]
   });
-
-  const handleMoveItem = async (itemId: string, direction: 'up' | 'down') => {
-    const currentIndex = items.findIndex(item => item.id === itemId);
-    if (currentIndex === -1) return;
-
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= items.length) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const currentItem = items[currentIndex];
-      const targetItem = items[newIndex];
-
-      // First, set current item's order to a temporary value
-      const { error: tempError } = await supabase
-        .from('dashboard_visual_config')
-        .update({ ordem: -1 })
-        .eq('id', currentItem.id);
-
-      if (tempError) throw tempError;
-
-      // Second, update target item's order
-      const { error: targetError } = await supabase
-        .from('dashboard_visual_config')
-        .update({ ordem: currentItem.ordem })
-        .eq('id', targetItem.id);
-
-      if (targetError) throw targetError;
-
-      // Finally, set current item to target's original order
-      const { error: finalError } = await supabase
-        .from('dashboard_visual_config')
-        .update({ ordem: targetItem.ordem })
-        .eq('id', currentItem.id);
-
-      if (finalError) throw finalError;
-
-      // Update local state
-      const newItems = [...items];
-      [newItems[currentIndex], newItems[newIndex]] = [newItems[newIndex], newItems[currentIndex]];
-      newItems[currentIndex].ordem = currentIndex;
-      newItems[newIndex].ordem = newIndex;
-      setItems(newItems);
-
-      setSuccess('Ordem atualizada com sucesso!');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Erro ao reordenar itens:', err);
-      setError('Erro ao reordenar itens');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchCompanies();
@@ -284,6 +229,19 @@ export const DashboardConfig = () => {
     return [];
   };
 
+  const getReferenceName = (id: string, tipo: 'categoria' | 'indicador' | 'conta_dre') => {
+    switch (tipo) {
+      case 'categoria':
+        return categories.find(c => c.id === id)?.name;
+      case 'indicador':
+        return indicators.find(i => i.id === id)?.name;
+      case 'conta_dre':
+        return dreAccounts.find(a => a.id === id)?.name;
+      default:
+        return 'Desconhecido';
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
@@ -303,15 +261,13 @@ export const DashboardConfig = () => {
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-          <AlertCircle size={20} className="text-red-400" />
+        <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-          <Check size={20} className="text-green-400" />
+        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3">
           <p className="text-green-400">{success}</p>
         </div>
       )}
@@ -356,22 +312,6 @@ export const DashboardConfig = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleMoveItem(item.id, 'up')}
-                  disabled={index === 0}
-                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Mover para cima"
-                >
-                  <ArrowUp size={16} />
-                </button>
-                <button
-                  onClick={() => handleMoveItem(item.id, 'down')}
-                  disabled={index === items.length - 1}
-                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Mover para baixo"
-                >
-                  <ArrowDown size={16} />
-                </button>
                 <button
                   onClick={() => {
                     setViewingItem(item);
@@ -446,7 +386,12 @@ export const DashboardConfig = () => {
                 ))
               ) : (
                 viewingItem.referencias_ids.map(refId => {
-                  const reference = getFilteredReferences().find(r => r.id === refId);
+                  const reference = viewingItem.tipo === 'categoria' 
+                    ? categories.find(c => c.id === refId)
+                    : viewingItem.tipo === 'indicador'
+                    ? indicators.find(i => i.id === refId)
+                    : dreAccounts.find(a => a.id === refId);
+
                   return reference && (
                     <div
                       key={refId}
