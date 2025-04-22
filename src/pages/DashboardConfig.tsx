@@ -9,6 +9,7 @@ interface DashboardItem {
   ordem: number;
   titulo_personalizado: string;
   tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum';
+  tipo_categoria?: 'receita' | 'despesa' | 'ambos';
   referencias_ids: string[];
   is_active: boolean;
 }
@@ -17,6 +18,7 @@ interface Reference {
   id: string;
   name: string;
   code?: string;
+  type?: 'revenue' | 'expense';
 }
 
 export const DashboardConfig = () => {
@@ -37,7 +39,9 @@ export const DashboardConfig = () => {
   const [formData, setFormData] = useState({
     titulo_personalizado: '',
     tipo: 'categoria' as DashboardItem['tipo'],
+    tipo_categoria: 'ambos' as 'receita' | 'despesa' | 'ambos',
     referencias_ids: [] as string[],
+    ordem: 0,
     is_active: true
   });
 
@@ -73,7 +77,7 @@ export const DashboardConfig = () => {
       // Fetch categories
       const { data: categoriesData } = await supabase
         .from('categories')
-        .select('id, name, code')
+        .select('id, name, code, type')
         .order('code');
       setCategories(categoriesData || []);
 
@@ -135,7 +139,6 @@ export const DashboardConfig = () => {
     setItems(newItems);
 
     try {
-      // Update all items with new ordem
       const { error } = await supabase
         .from('dashboard_visual_config')
         .upsert(
@@ -145,6 +148,7 @@ export const DashboardConfig = () => {
             empresa_id: item.empresa_id,
             titulo_personalizado: item.titulo_personalizado,
             tipo: item.tipo,
+            tipo_categoria: item.tipo_categoria,
             referencias_ids: item.referencias_ids,
             is_active: item.is_active
           }))
@@ -164,9 +168,10 @@ export const DashboardConfig = () => {
 
       const payload = {
         empresa_id: selectedCompany,
-        ordem: items.length,
+        ordem: editingItem ? editingItem.ordem : items.length,
         titulo_personalizado: formData.titulo_personalizado,
         tipo: formData.tipo,
+        tipo_categoria: formData.tipo === 'categoria' ? formData.tipo_categoria : null,
         referencias_ids: formData.referencias_ids,
         is_active: formData.is_active
       };
@@ -192,7 +197,9 @@ export const DashboardConfig = () => {
       setFormData({
         titulo_personalizado: '',
         tipo: 'categoria',
+        tipo_categoria: 'ambos',
         referencias_ids: [],
+        ordem: 0,
         is_active: true
       });
       setSuccess('Item salvo com sucesso!');
@@ -225,17 +232,17 @@ export const DashboardConfig = () => {
     }
   };
 
-  const getReferenceOptions = (tipo: string) => {
-    switch (tipo) {
-      case 'categoria':
-        return categories;
-      case 'indicador':
-        return indicators;
-      case 'conta_dre':
-        return dreAccounts;
-      default:
-        return [...categories, ...indicators, ...dreAccounts];
+  const getReferenceOptions = () => {
+    if (formData.tipo === 'categoria') {
+      return categories.filter(cat => {
+        if (formData.tipo_categoria === 'receita') return cat.type === 'revenue';
+        if (formData.tipo_categoria === 'despesa') return cat.type === 'expense';
+        return true;
+      });
     }
+    if (formData.tipo === 'indicador') return indicators;
+    if (formData.tipo === 'conta_dre') return dreAccounts;
+    return [...categories, ...indicators, ...dreAccounts];
   };
 
   const handleReferenceToggle = (refId: string) => {
@@ -335,12 +342,29 @@ export const DashboardConfig = () => {
                                   <h3 className="text-lg font-medium text-zinc-100">
                                     {item.titulo_personalizado || `Item ${index + 1}`}
                                   </h3>
-                                  <p className="text-sm text-zinc-400">
-                                    {item.tipo === 'categoria' && 'Soma de Categorias'}
-                                    {item.tipo === 'indicador' && 'Indicador'}
-                                    {item.tipo === 'conta_dre' && 'Conta DRE'}
-                                    {item.tipo === 'custom_sum' && 'Soma Personalizada'}
-                                  </p>
+                                  <div className="flex items-center gap-4 mt-1">
+                                    <p className="text-sm text-zinc-400">
+                                      {item.tipo === 'categoria' && 'Soma de Categorias'}
+                                      {item.tipo === 'indicador' && 'Indicador'}
+                                      {item.tipo === 'conta_dre' && 'Conta DRE'}
+                                      {item.tipo === 'custom_sum' && 'Soma Personalizada'}
+                                    </p>
+                                    {item.tipo === 'categoria' && item.tipo_categoria && (
+                                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                                        item.tipo_categoria === 'receita' 
+                                          ? 'bg-green-500/20 text-green-400'
+                                          : item.tipo_categoria === 'despesa'
+                                          ? 'bg-red-500/20 text-red-400'
+                                          : 'bg-blue-500/20 text-blue-400'
+                                      }`}>
+                                        {item.tipo_categoria === 'receita' ? 'Receita' : 
+                                         item.tipo_categoria === 'despesa' ? 'Despesa' : 'Ambos'}
+                                      </span>
+                                    )}
+                                    <span className="text-sm text-zinc-500">
+                                      Ordem: {item.ordem + 1}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -359,7 +383,9 @@ export const DashboardConfig = () => {
                                       setFormData({
                                         titulo_personalizado: item.titulo_personalizado,
                                         tipo: item.tipo,
+                                        tipo_categoria: item.tipo_categoria || 'ambos',
                                         referencias_ids: item.referencias_ids,
+                                        ordem: item.ordem,
                                         is_active: item.is_active
                                       });
                                       setShowModal(true);
@@ -413,7 +439,7 @@ export const DashboardConfig = () => {
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {viewingItem.referencias_ids.map(refId => {
-                const reference = getReferenceOptions(viewingItem.tipo).find(r => r.id === refId);
+                const reference = getReferenceOptions().find(r => r.id === refId);
                 return reference && (
                   <div
                     key={refId}
@@ -457,7 +483,9 @@ export const DashboardConfig = () => {
                   setFormData({
                     titulo_personalizado: '',
                     tipo: 'categoria',
+                    tipo_categoria: 'ambos',
                     referencias_ids: [],
+                    ordem: 0,
                     is_active: true
                   });
                 }}
@@ -470,7 +498,7 @@ export const DashboardConfig = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  Título Personalizado
+                  Título do Item
                 </label>
                 <input
                   type="text"
@@ -478,6 +506,19 @@ export const DashboardConfig = () => {
                   onChange={(e) => setFormData({ ...formData, titulo_personalizado: e.target.value })}
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                   placeholder="Nome que será exibido no dashboard"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Ordem de Exibição
+                </label>
+                <input
+                  type="number"
+                  value={formData.ordem}
+                  onChange={(e) => setFormData({ ...formData, ordem: parseInt(e.target.value) })}
+                  min={0}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 />
               </div>
 
@@ -501,6 +542,46 @@ export const DashboardConfig = () => {
                 </select>
               </div>
 
+              {formData.tipo === 'categoria' && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">
+                    Tipo de Categoria
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setFormData({ ...formData, tipo_categoria: 'ambos' })}
+                      className={`px-4 py-2 rounded-lg ${
+                        formData.tipo_categoria === 'ambos'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Ambos
+                    </button>
+                    <button
+                      onClick={() => setFormData({ ...formData, tipo_categoria: 'receita' })}
+                      className={`px-4 py-2 rounded-lg ${
+                        formData.tipo_categoria === 'receita'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Receita
+                    </button>
+                    <button
+                      onClick={() => setFormData({ ...formData, tipo_categoria: 'despesa' })}
+                      className={`px-4 py-2 rounded-lg ${
+                        formData.tipo_categoria === 'despesa'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Despesa
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1">
                   {formData.tipo === 'categoria' ? 'Categorias' :
@@ -509,7 +590,7 @@ export const DashboardConfig = () => {
                     'Itens para Soma'}
                 </label>
                 <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
-                  {getReferenceOptions(formData.tipo).map(ref => (
+                  {getReferenceOptions().map(ref => (
                     <label
                       key={ref.id}
                       className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
@@ -523,6 +604,15 @@ export const DashboardConfig = () => {
                       <span className="text-zinc-300">
                         {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
                       </span>
+                      {ref.type && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          ref.type === 'revenue' 
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {ref.type === 'revenue' ? 'Receita' : 'Despesa'}
+                        </span>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -552,7 +642,9 @@ export const DashboardConfig = () => {
                   setFormData({
                     titulo_personalizado: '',
                     tipo: 'categoria',
+                    tipo_categoria: 'ambos',
                     referencias_ids: [],
+                    ordem: 0,
                     is_active: true
                   });
                 }}
