@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { LineChart, BarChart, Calendar } from 'lucide-react';
+import { LineChart, BarChart, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
 
 interface DashboardItem {
   id: string;
   titulo_personalizado: string;
   tipo: 'categoria' | 'indicador' | 'conta_dre' | 'custom_sum';
   referencias_ids: string[];
+  ordem: number;
+  cor_resultado: string;
   valor: number;
 }
 
@@ -25,7 +27,7 @@ const MONTHS = [
 
 export const Dashboard = () => {
   const [companies, setCompanies] = useState<{ id: string; trading_name: string; }[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTHS[new Date().getMonth()]);
   const [items, setItems] = useState<DashboardItem[]>([]);
@@ -83,7 +85,7 @@ export const Dashboard = () => {
       if (error) throw error;
       setCompanies(data || []);
     } catch (err) {
-      console.error('Error fetching companies:', err);
+      console.error('Erro ao carregar empresas:', err);
       setError('Erro ao carregar empresas');
     }
   };
@@ -93,15 +95,54 @@ export const Dashboard = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
+      const { data: configData, error: configError } = await supabase
         .from('dashboard_visual_config')
         .select('*')
         .eq('empresa_id', selectedCompanyId)
         .eq('is_active', true)
         .order('ordem');
 
-      if (error) throw error;
-      setItems(data || []);
+      if (configError) throw configError;
+
+      // Processar os dados e calcular valores
+      const processedItems = await Promise.all((configData || []).map(async (item) => {
+        let valor = 0;
+
+        switch (item.tipo) {
+          case 'categoria':
+            const { data: catData } = await supabase
+              .from('dados_brutos')
+              .select('valor')
+              .eq('empresa_id', selectedCompanyId)
+              .eq('ano', selectedYear)
+              .eq('mes', selectedMonth)
+              .in('categoria_id', item.referencias_ids);
+            
+            valor = catData?.reduce((sum, d) => sum + d.valor, 0) || 0;
+            break;
+
+          case 'indicador':
+            const { data: indData } = await supabase
+              .from('dados_brutos')
+              .select('valor')
+              .eq('empresa_id', selectedCompanyId)
+              .eq('ano', selectedYear)
+              .eq('mes', selectedMonth)
+              .in('indicador_id', item.referencias_ids);
+            
+            valor = indData?.reduce((sum, d) => sum + d.valor, 0) || 0;
+            break;
+
+          // Adicionar outros casos conforme necessário
+        }
+
+        return {
+          ...item,
+          valor
+        };
+      }));
+
+      setItems(processedItems);
     } catch (err) {
       console.error('Erro ao carregar itens:', err);
       setError('Erro ao carregar itens do dashboard');
@@ -117,15 +158,97 @@ export const Dashboard = () => {
     });
   };
 
-  const firstName = currentUser?.name?.split(' ')[0] || '';
+  const renderCards = () => {
+    const topCards = items.filter(item => item.ordem <= 4);
+    const mainChart = items.find(item => item.ordem === 5);
+    const bottomCards = items.filter(item => item.ordem > 5);
+
+    return (
+      <div className="space-y-6">
+        {/* Top Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {Array.from({ length: 4 }).map((_, index) => {
+            const item = topCards[index];
+            return (
+              <div key={index} className="bg-zinc-800 rounded-xl p-6">
+                {item ? (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
+                      <div className="p-2 bg-zinc-700 rounded-lg">
+                        <TrendingUp size={20} className="text-zinc-400" />
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
+                      {formatCurrency(item.valor)}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-zinc-500">Aguardando configuração...</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Main Chart */}
+        <div className="bg-zinc-800 rounded-xl p-6 h-[400px]">
+          {mainChart ? (
+            <div className="flex items-center justify-center h-full">
+              <LineChart className="text-zinc-400" size={32} />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-zinc-500">Gráfico será implementado em breve...</p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {Array.from({ length: 2 }).map((_, index) => {
+            const item = bottomCards[index];
+            return (
+              <div key={index} className="bg-zinc-800 rounded-xl p-6">
+                {item ? (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
+                      <div className="p-2 bg-zinc-700 rounded-lg">
+                        {index === 0 ? (
+                          <BarChart size={20} className="text-zinc-400" />
+                        ) : (
+                          <Calendar size={20} className="text-zinc-400" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
+                      {formatCurrency(item.valor)}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-zinc-500">Aguardando configuração...</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-[1600px] mx-auto py-8">
-      <div className="bg-zinc-900 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl text-zinc-100">
-            Olá, {firstName}
-          </h2>
+      <div className="bg-zinc-900 rounded-xl p-8 mb-8">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
+            <p className="text-zinc-400 mt-1">Visualize os principais indicadores</p>
+          </div>
           <div className="flex items-center gap-4">
             {currentUser?.has_all_companies_access && (
               <select
@@ -162,48 +285,18 @@ export const Dashboard = () => {
           </div>
         </div>
 
-        {/* Cards superiores */}
-        <div className="grid grid-cols-4 gap-6 mb-6">
-          {[1, 2, 3, 4].map((_, index) => (
-            <div key={index} className="bg-zinc-800 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-zinc-300">Card {index + 1}</h3>
-                <div className="p-2 bg-zinc-700 rounded-lg">
-                  <LineChart size={20} className="text-zinc-400" />
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-zinc-100">{formatCurrency(0)}</p>
-              <p className="text-sm text-zinc-500 mt-2">Sem dados</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Gráfico principal */}
-        <div className="bg-zinc-800 rounded-xl p-6 mb-6 h-[400px] flex items-center justify-center">
-          <p className="text-zinc-400">Gráfico será implementado aqui</p>
-        </div>
-
-        {/* Cards inferiores */}
-        <div className="grid grid-cols-2 gap-6">
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-zinc-300">Análise 1</h3>
-              <div className="p-2 bg-zinc-700 rounded-lg">
-                <BarChart size={20} className="text-zinc-400" />
-              </div>
-            </div>
-            <p className="text-zinc-400">Dados serão carregados aqui</p>
+        {error ? (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
+            <AlertCircle size={20} className="text-red-400" />
+            <p className="text-red-400">{error}</p>
           </div>
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-zinc-300">Análise 2</h3>
-              <div className="p-2 bg-zinc-700 rounded-lg">
-                <Calendar size={20} className="text-zinc-400" />
-              </div>
-            </div>
-            <p className="text-zinc-400">Dados serão carregados aqui</p>
+        ) : loading ? (
+          <div className="text-center py-8">
+            <p className="text-zinc-400">Carregando dados...</p>
           </div>
-        </div>
+        ) : (
+          renderCards()
+        )}
       </div>
     </div>
   );
