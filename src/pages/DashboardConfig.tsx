@@ -222,34 +222,25 @@ export const DashboardConfig = () => {
     const [reorderedItem] = newItems.splice(result.source.index, 1);
     newItems.splice(result.destination.index, 0, reorderedItem);
 
-    newItems.forEach((item, index) => {
-      item.ordem = index;
-    });
-
-    setItems(newItems);
-
     try {
-      const { error } = await supabase
-        .from('dashboard_visual_config')
-        .upsert(
-          newItems.map(item => ({
-            id: item.id,
-            ordem: item.ordem,
-            empresa_id: item.empresa_id,
-            titulo_personalizado: item.titulo_personalizado,
-            tipo: item.tipo,
-            referencias_ids: item.referencias_ids,
-            is_active: item.is_active,
-            cor_resultado: item.cor_resultado,
-            tipo_grafico: item.tipo_grafico,
-            dados_vinculados: item.dados_vinculados
-          }))
-        );
+      setLoading(true);
+
+      // Chamar a função de reordenação
+      const { error } = await supabase.rpc('reorder_dashboard_items', {
+        p_empresa_id: selectedCompanyId,
+        p_item_id: reorderedItem.id,
+        p_nova_ordem: result.destination.index
+      });
 
       if (error) throw error;
+
+      // Atualizar a lista local
+      await fetchItems();
     } catch (err) {
-      console.error('Error updating order:', err);
+      console.error('Erro ao atualizar ordem:', err);
       setError('Erro ao atualizar ordem dos itens');
+    } finally {
+      setLoading(false);
     }
   };
 
