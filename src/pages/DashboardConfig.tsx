@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, GripVertical, X, Save, AlertCircle, Check } from 'lucide-react';
+import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -29,6 +29,17 @@ export const DashboardConfig = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingItem, setViewingItem] = useState<DashboardItem | null>(null);
+  const [editingItem, setEditingItem] = useState<DashboardItem | null>(null);
+
+  const [formData, setFormData] = useState({
+    titulo_personalizado: '',
+    tipo: 'categoria' as DashboardItem['tipo'],
+    referencias_ids: [] as string[],
+    is_active: true
+  });
 
   useEffect(() => {
     fetchCompanies();
@@ -73,16 +84,15 @@ export const DashboardConfig = () => {
         .order('code');
       setIndicators(indicatorsData || []);
 
-      // Fetch DRE accounts - using the correct column name 'nome'
+      // Fetch DRE accounts
       const { data: accountsData } = await supabase
         .from('contas_dre_modelo')
         .select('id, nome')
         .order('ordem_padrao');
       
-      // Transform the data to match our Reference interface
       setDreAccounts(accountsData?.map(acc => ({ 
         id: acc.id, 
-        name: acc.nome, // Map 'nome' to 'name'
+        name: acc.nome,
         code: '' 
       })) || []);
     } catch (err) {
@@ -110,40 +120,7 @@ export const DashboardConfig = () => {
     }
   };
 
-  const handleAddItem = () => {
-    const newItem: DashboardItem = {
-      id: crypto.randomUUID(),
-      empresa_id: selectedCompany,
-      ordem: items.length,
-      titulo_personalizado: '',
-      tipo: 'categoria',
-      referencias_ids: [],
-      is_active: true
-    };
-    setItems([...items, newItem]);
-  };
-
-  const handleRemoveItem = (index: number) => {
-    const newItems = [...items];
-    newItems.splice(index, 1);
-    newItems.forEach((item, idx) => {
-      item.ordem = idx;
-    });
-    setItems(newItems);
-  };
-
-  const handleItemChange = (index: number, field: keyof DashboardItem, value: any) => {
-    const newItems = [...items];
-    newItems[index] = {
-      ...newItems[index],
-      [field]: value,
-      // Reset references when changing type
-      referencias_ids: field === 'tipo' ? [] : newItems[index].referencias_ids
-    };
-    setItems(newItems);
-  };
-
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = async (result: any) => {
     if (!result.destination) return;
 
     const newItems = Array.from(items);
@@ -156,6 +133,28 @@ export const DashboardConfig = () => {
     });
 
     setItems(newItems);
+
+    try {
+      // Update all items with new ordem
+      const { error } = await supabase
+        .from('dashboard_visual_config')
+        .upsert(
+          newItems.map(item => ({
+            id: item.id,
+            ordem: item.ordem,
+            empresa_id: item.empresa_id,
+            titulo_personalizado: item.titulo_personalizado,
+            tipo: item.tipo,
+            referencias_ids: item.referencias_ids,
+            is_active: item.is_active
+          }))
+        );
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error updating order:', err);
+      setError('Erro ao atualizar ordem dos itens');
+    }
   };
 
   const handleSave = async () => {
@@ -163,28 +162,66 @@ export const DashboardConfig = () => {
       setLoading(true);
       setError(null);
 
-      // Delete existing items
-      const { error: deleteError } = await supabase
-        .from('dashboard_visual_config')
-        .delete()
-        .eq('empresa_id', selectedCompany);
+      const payload = {
+        empresa_id: selectedCompany,
+        ordem: items.length,
+        titulo_personalizado: formData.titulo_personalizado,
+        tipo: formData.tipo,
+        referencias_ids: formData.referencias_ids,
+        is_active: formData.is_active
+      };
 
-      if (deleteError) throw deleteError;
+      if (editingItem) {
+        const { error } = await supabase
+          .from('dashboard_visual_config')
+          .update(payload)
+          .eq('id', editingItem.id);
 
-      // Insert new items
-      const { error: insertError } = await supabase
-        .from('dashboard_visual_config')
-        .insert(items.map(({ id, ...item }) => item));
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('dashboard_visual_config')
+          .insert([payload]);
 
-      if (insertError) throw insertError;
+        if (error) throw error;
+      }
 
-      setSuccess('Configurações salvas com sucesso!');
+      await fetchItems();
+      setShowModal(false);
+      setEditingItem(null);
+      setFormData({
+        titulo_personalizado: '',
+        tipo: 'categoria',
+        referencias_ids: [],
+        is_active: true
+      });
+      setSuccess('Item salvo com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error saving config:', err);
-      setError('Erro ao salvar configurações');
+      console.error('Error saving item:', err);
+      setError('Erro ao salvar item');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este item?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('dashboard_visual_config')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await fetchItems();
+      setSuccess('Item excluído com sucesso!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Error deleting item:', err);
+      setError('Erro ao excluir item');
     }
   };
 
@@ -201,6 +238,15 @@ export const DashboardConfig = () => {
     }
   };
 
+  const handleReferenceToggle = (refId: string) => {
+    setFormData(prev => {
+      const newIds = prev.referencias_ids.includes(refId)
+        ? prev.referencias_ids.filter(id => id !== refId)
+        : [...prev.referencias_ids, refId];
+      return { ...prev, referencias_ids: newIds };
+    });
+  };
+
   return (
     <div className="max-w-6xl mx-auto py-8">
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
@@ -211,12 +257,11 @@ export const DashboardConfig = () => {
           </div>
           {selectedCompany && (
             <button
-              onClick={handleSave}
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2 disabled:opacity-50"
+              onClick={() => setShowModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
             >
-              <Save size={20} />
-              Salvar Configurações
+              <Plus size={20} />
+              Novo Item
             </button>
           )}
         </div>
@@ -284,63 +329,56 @@ export const DashboardConfig = () => {
                               <GripVertical size={20} className="text-zinc-400" />
                             </div>
 
-                            <div className="flex-1 space-y-4">
-                              <input
-                                type="text"
-                                value={item.titulo_personalizado}
-                                onChange={(e) => handleItemChange(index, 'titulo_personalizado', e.target.value)}
-                                placeholder="Título personalizado"
-                                className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                              />
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
                                 <div>
-                                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                                    Tipo
-                                  </label>
-                                  <select
-                                    value={item.tipo}
-                                    onChange={(e) => handleItemChange(index, 'tipo', e.target.value)}
-                                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                                  >
-                                    <option value="categoria">Categoria</option>
-                                    <option value="indicador">Indicador</option>
-                                    <option value="conta_dre">Conta DRE</option>
-                                    <option value="custom_sum">Soma Personalizada</option>
-                                  </select>
+                                  <h3 className="text-lg font-medium text-zinc-100">
+                                    {item.titulo_personalizado || `Item ${index + 1}`}
+                                  </h3>
+                                  <p className="text-sm text-zinc-400">
+                                    {item.tipo === 'categoria' && 'Soma de Categorias'}
+                                    {item.tipo === 'indicador' && 'Indicador'}
+                                    {item.tipo === 'conta_dre' && 'Conta DRE'}
+                                    {item.tipo === 'custom_sum' && 'Soma Personalizada'}
+                                  </p>
                                 </div>
-
-                                <div>
-                                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                                    Referências
-                                  </label>
-                                  <select
-                                    multiple
-                                    value={item.referencias_ids}
-                                    onChange={(e) => handleItemChange(
-                                      index,
-                                      'referencias_ids',
-                                      Array.from(e.target.selectedOptions, option => option.value)
-                                    )}
-                                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                                    size={4}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setViewingItem(item);
+                                      setShowViewModal(true);
+                                    }}
+                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
+                                    title="Ver Itens"
                                   >
-                                    {getReferenceOptions(item.tipo).map(ref => (
-                                      <option key={ref.id} value={ref.id}>
-                                        {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    <Eye size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingItem(item);
+                                      setFormData({
+                                        titulo_personalizado: item.titulo_personalizado,
+                                        tipo: item.tipo,
+                                        referencias_ids: item.referencias_ids,
+                                        is_active: item.is_active
+                                      });
+                                      setShowModal(true);
+                                    }}
+                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400"
+                                    title="Editar"
+                                  >
+                                    <Save size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(item.id)}
+                                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-400"
+                                    title="Excluir"
+                                  >
+                                    <X size={16} />
+                                  </button>
                                 </div>
                               </div>
                             </div>
-
-                            <button
-                              onClick={() => handleRemoveItem(index)}
-                              className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-400"
-                            >
-                              <X size={20} />
-                            </button>
                           </div>
                         </div>
                       )}
@@ -351,14 +389,186 @@ export const DashboardConfig = () => {
               )}
             </Droppable>
           </DragDropContext>
+        </div>
+      )}
 
-          <button
-            onClick={handleAddItem}
-            className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 flex items-center justify-center gap-2"
-          >
-            <Plus size={20} />
-            Adicionar Novo Item
-          </button>
+      {/* Modal de Visualização */}
+      {showViewModal && viewingItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-zinc-100">
+                {viewingItem.titulo_personalizado || 'Itens Selecionados'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  setViewingItem(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {viewingItem.referencias_ids.map(refId => {
+                const reference = getReferenceOptions(viewingItem.tipo).find(r => r.id === refId);
+                return reference && (
+                  <div
+                    key={refId}
+                    className="p-3 bg-zinc-800 rounded-lg"
+                  >
+                    <span className="text-zinc-300">
+                      {reference.code ? `${reference.code} - ${reference.name}` : reference.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  setViewingItem(null);
+                }}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-zinc-100">
+                {editingItem ? 'Editar Item' : 'Novo Item'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingItem(null);
+                  setFormData({
+                    titulo_personalizado: '',
+                    tipo: 'categoria',
+                    referencias_ids: [],
+                    is_active: true
+                  });
+                }}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Título Personalizado
+                </label>
+                <input
+                  type="text"
+                  value={formData.titulo_personalizado}
+                  onChange={(e) => setFormData({ ...formData, titulo_personalizado: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  placeholder="Nome que será exibido no dashboard"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Tipo
+                </label>
+                <select
+                  value={formData.tipo}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    tipo: e.target.value as DashboardItem['tipo'],
+                    referencias_ids: []
+                  })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                >
+                  <option value="categoria">Categorias</option>
+                  <option value="indicador">Indicador</option>
+                  <option value="conta_dre">Conta DRE</option>
+                  <option value="custom_sum">Soma Personalizada</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  {formData.tipo === 'categoria' ? 'Categorias' :
+                    formData.tipo === 'indicador' ? 'Indicador' :
+                    formData.tipo === 'conta_dre' ? 'Conta DRE' :
+                    'Itens para Soma'}
+                </label>
+                <div className="space-y-2 max-h-64 overflow-y-auto bg-zinc-800 rounded-lg p-2">
+                  {getReferenceOptions(formData.tipo).map(ref => (
+                    <label
+                      key={ref.id}
+                      className="flex items-center gap-2 p-2 hover:bg-zinc-700 rounded-lg cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.referencias_ids.includes(ref.id)}
+                        onChange={() => handleReferenceToggle(ref.id)}
+                        className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                      />
+                      <span className="text-zinc-300">
+                        {ref.code ? `${ref.code} - ${ref.name}` : ref.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      is_active: e.target.checked
+                    })}
+                    className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                  />
+                  <span className="text-zinc-400">Item Ativo</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingItem(null);
+                  setFormData({
+                    titulo_personalizado: '',
+                    tipo: 'categoria',
+                    referencias_ids: [],
+                    is_active: true
+                  });
+                }}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!formData.referencias_ids.length}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
