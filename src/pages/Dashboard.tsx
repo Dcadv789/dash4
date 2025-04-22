@@ -1,7 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { LineChart, BarChart, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
+import { LineChart, BarChart, Calendar, TrendingUp, AlertCircle, ArrowUp, ArrowDown } from 'lucide-react';
+
+interface Company {
+  id: string;
+  trading_name: string;
+}
+
+interface SystemUser {
+  id: string;
+  role: string;
+  company_id: string | null;
+  has_all_companies_access: boolean;
+}
+
+const MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 interface DashboardItem {
   id: string;
@@ -13,20 +30,8 @@ interface DashboardItem {
   valor: number;
 }
 
-interface SystemUser {
-  id: string;
-  company_id: string | null;
-  has_all_companies_access: boolean;
-  name: string;
-}
-
-const MONTHS = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
-
 export const Dashboard = () => {
-  const [companies, setCompanies] = useState<{ id: string; trading_name: string; }[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTHS[new Date().getMonth()]);
@@ -62,7 +67,7 @@ export const Dashboard = () => {
     try {
       const { data: userData, error: userError } = await supabase
         .from('system_users')
-        .select('id, company_id, has_all_companies_access, name')
+        .select('id, role, company_id, has_all_companies_access')
         .eq('auth_user_id', user?.id)
         .single();
 
@@ -90,10 +95,20 @@ export const Dashboard = () => {
     }
   };
 
+  const getPreviousMonth = (month: string, year: number): { month: string; year: number } => {
+    const monthIndex = MONTHS.indexOf(month);
+    if (monthIndex === 0) {
+      return { month: MONTHS[11], year: year - 1 };
+    }
+    return { month: MONTHS[monthIndex - 1], year };
+  };
+
   const fetchDashboardItems = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      const { month: prevMonth, year: prevYear } = getPreviousMonth(selectedMonth, selectedYear);
 
       const { data: configData, error: configError } = await supabase
         .from('dashboard_visual_config')
@@ -104,41 +119,36 @@ export const Dashboard = () => {
 
       if (configError) throw configError;
 
-      // Processar os dados e calcular valores
       const processedItems = await Promise.all((configData || []).map(async (item) => {
-        let valor = 0;
+        let currentValue = 0;
+        let previousValue = 0;
 
-        switch (item.tipo) {
-          case 'categoria':
-            const { data: catData } = await supabase
-              .from('dados_brutos')
-              .select('valor')
-              .eq('empresa_id', selectedCompanyId)
-              .eq('ano', selectedYear)
-              .eq('mes', selectedMonth)
-              .in('categoria_id', item.referencias_ids);
-            
-            valor = catData?.reduce((sum, d) => sum + d.valor, 0) || 0;
-            break;
+        // Buscar dados do mês atual
+        const { data: currentData } = await supabase
+          .from('dados_brutos')
+          .select('valor')
+          .eq('empresa_id', selectedCompanyId)
+          .eq('ano', selectedYear)
+          .eq('mes', selectedMonth)
+          .in(item.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', item.referencias_ids);
 
-          case 'indicador':
-            const { data: indData } = await supabase
-              .from('dados_brutos')
-              .select('valor')
-              .eq('empresa_id', selectedCompanyId)
-              .eq('ano', selectedYear)
-              .eq('mes', selectedMonth)
-              .in('indicador_id', item.referencias_ids);
-            
-            valor = indData?.reduce((sum, d) => sum + d.valor, 0) || 0;
-            break;
+        currentValue = currentData?.reduce((sum, d) => sum + d.valor, 0) || 0;
 
-          // Adicionar outros casos conforme necessário
-        }
+        // Buscar dados do mês anterior
+        const { data: previousData } = await supabase
+          .from('dados_brutos')
+          .select('valor')
+          .eq('empresa_id', selectedCompanyId)
+          .eq('ano', prevYear)
+          .eq('mes', prevMonth)
+          .in(item.tipo === 'categoria' ? 'categoria_id' : 'indicador_id', item.referencias_ids);
+
+        previousValue = previousData?.reduce((sum, d) => sum + d.valor, 0) || 0;
 
         return {
           ...item,
-          valor
+          valor: currentValue,
+          valorAnterior: previousValue
         };
       }));
 
@@ -158,6 +168,15 @@ export const Dashboard = () => {
     });
   };
 
+  const calculateVariation = (currentValue: number, previousValue: number) => {
+    if (previousValue === 0) return { percentage: 0, isPositive: true };
+    const variation = ((currentValue - previousValue) / previousValue) * 100;
+    return {
+      percentage: Math.abs(variation).toFixed(1),
+      isPositive: variation >= 0
+    };
+  };
+
   const renderCards = () => {
     const topCards = items.filter(item => item.ordem <= 4);
     const mainChart = items.find(item => item.ordem === 5);
@@ -169,19 +188,36 @@ export const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, index) => {
             const item = topCards[index];
+            const variation = item ? calculateVariation(item.valor, item.valorAnterior) : { percentage: 0, isPositive: true };
+
             return (
-              <div key={index} className="bg-zinc-800 rounded-xl p-6">
+              <div key={index} className="bg-zinc-800 rounded-xl p-6 flex flex-col justify-between min-h-[180px]">
                 {item ? (
                   <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
-                      <div className="p-2 bg-zinc-700 rounded-lg">
-                        <TrendingUp size={20} className="text-zinc-400" />
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
+                        <div className="p-2 bg-zinc-700 rounded-lg">
+                          <TrendingUp size={20} className="text-zinc-400" />
+                        </div>
+                      </div>
+                      <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
+                        {formatCurrency(item.valor)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-700">
+                      <p className="text-sm text-zinc-400">Comparado ao mês anterior</p>
+                      <div className="flex items-center gap-2">
+                        {variation.isPositive ? (
+                          <ArrowUp className="text-green-400" size={16} />
+                        ) : (
+                          <ArrowDown className="text-red-400" size={16} />
+                        )}
+                        <span className={variation.isPositive ? "text-green-400" : "text-red-400"}>
+                          {variation.percentage}%
+                        </span>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
-                      {formatCurrency(item.valor)}
-                    </p>
                   </>
                 ) : (
                   <div className="flex items-center justify-center h-full">
@@ -210,23 +246,40 @@ export const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {Array.from({ length: 2 }).map((_, index) => {
             const item = bottomCards[index];
+            const variation = item ? calculateVariation(item.valor, item.valorAnterior) : { percentage: 0, isPositive: true };
+
             return (
-              <div key={index} className="bg-zinc-800 rounded-xl p-6">
+              <div key={index} className="bg-zinc-800 rounded-xl p-6 flex flex-col justify-between min-h-[180px]">
                 {item ? (
                   <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
-                      <div className="p-2 bg-zinc-700 rounded-lg">
-                        {index === 0 ? (
-                          <BarChart size={20} className="text-zinc-400" />
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-zinc-300">{item.titulo_personalizado}</h3>
+                        <div className="p-2 bg-zinc-700 rounded-lg">
+                          {index === 0 ? (
+                            <BarChart size={20} className="text-zinc-400" />
+                          ) : (
+                            <Calendar size={20} className="text-zinc-400" />
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
+                        {formatCurrency(item.valor)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-700">
+                      <p className="text-sm text-zinc-400">Comparado ao mês anterior</p>
+                      <div className="flex items-center gap-2">
+                        {variation.isPositive ? (
+                          <ArrowUp className="text-green-400" size={16} />
                         ) : (
-                          <Calendar size={20} className="text-zinc-400" />
+                          <ArrowDown className="text-red-400" size={16} />
                         )}
+                        <span className={variation.isPositive ? "text-green-400" : "text-red-400"}>
+                          {variation.percentage}%
+                        </span>
                       </div>
                     </div>
-                    <p className="text-2xl font-bold" style={{ color: item.cor_resultado }}>
-                      {formatCurrency(item.valor)}
-                    </p>
                   </>
                 ) : (
                   <div className="flex items-center justify-center h-full">
@@ -242,7 +295,7 @@ export const Dashboard = () => {
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto py-8">
+    <div className="max-w-[1600px] mx-auto py-8 max-h-[1080px] overflow-y-auto">
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
         <div className="flex justify-between items-start mb-6">
           <div>
@@ -293,6 +346,10 @@ export const Dashboard = () => {
         ) : loading ? (
           <div className="text-center py-8">
             <p className="text-zinc-400">Carregando dados...</p>
+          </div>
+        ) : !selectedCompanyId ? (
+          <div className="text-center py-8">
+            <p className="text-zinc-400">Selecione uma empresa para visualizar o dashboard</p>
           </div>
         ) : (
           renderCards()
