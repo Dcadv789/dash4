@@ -12,6 +12,7 @@ interface DashboardItem {
   tipo_categoria?: 'receita' | 'despesa' | 'ambos';
   referencias_ids: string[];
   is_active: boolean;
+  cor_resultado: string;
 }
 
 interface Reference {
@@ -28,7 +29,7 @@ export const DashboardConfig = () => {
   const [categories, setCategories] = useState<Reference[]>([]);
   const [indicators, setIndicators] = useState<Reference[]>([]);
   const [dreAccounts, setDreAccounts] = useState<Reference[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -42,7 +43,8 @@ export const DashboardConfig = () => {
     tipo_categoria: 'ambos' as 'receita' | 'despesa' | 'ambos',
     referencias_ids: [] as string[],
     ordem: 0,
-    is_active: true
+    is_active: true,
+    cor_resultado: '#44FF44'
   });
 
   useEffect(() => {
@@ -150,7 +152,8 @@ export const DashboardConfig = () => {
             tipo: item.tipo,
             tipo_categoria: item.tipo_categoria,
             referencias_ids: item.referencias_ids,
-            is_active: item.is_active
+            is_active: item.is_active,
+            cor_resultado: item.cor_resultado
           }))
         );
 
@@ -173,7 +176,8 @@ export const DashboardConfig = () => {
         tipo: formData.tipo,
         tipo_categoria: formData.tipo === 'categoria' ? formData.tipo_categoria : null,
         referencias_ids: formData.referencias_ids,
-        is_active: formData.is_active
+        is_active: formData.is_active,
+        cor_resultado: formData.cor_resultado
       };
 
       if (editingItem) {
@@ -200,7 +204,8 @@ export const DashboardConfig = () => {
         tipo_categoria: 'ambos',
         referencias_ids: [],
         ordem: 0,
-        is_active: true
+        is_active: true,
+        cor_resultado: '#44FF44'
       });
       setSuccess('Item salvo com sucesso!');
       setTimeout(() => setSuccess(null), 3000);
@@ -256,37 +261,37 @@ export const DashboardConfig = () => {
 
   return (
     <div className="max-w-6xl mx-auto py-8">
-      <div className="bg-zinc-900 rounded-xl p-8 mb-8">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-100">Configuração do Dashboard</h1>
-            <p className="text-zinc-400 mt-1">Configure os itens que serão exibidos no dashboard</p>
-          </div>
-          {selectedCompany && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
-            >
-              <Plus size={20} />
-              Novo Item
-            </button>
-          )}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Configuração do Dashboard</h1>
+          <p className="text-zinc-400 mt-1">Configure os itens que serão exibidos no dashboard</p>
         </div>
-
-        {error && (
-          <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-            <AlertCircle size={20} className="text-red-400" />
-            <p className="text-red-400">{error}</p>
-          </div>
+        {selectedCompany && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
+          >
+            <Plus size={20} />
+            Novo Item
+          </button>
         )}
+      </div>
 
-        {success && (
-          <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
-            <Check size={20} className="text-green-400" />
-            <p className="text-green-400">{success}</p>
-          </div>
-        )}
+      {error && (
+        <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
+          <AlertCircle size={20} className="text-red-400" />
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
 
+      {success && (
+        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3 flex items-center gap-2">
+          <Check size={20} className="text-green-400" />
+          <p className="text-green-400">{success}</p>
+        </div>
+      )}
+
+      <div className="bg-zinc-900 rounded-xl p-8 mb-8">
         <div className="w-full md:w-96">
           <label className="block text-sm font-medium text-zinc-400 mb-2">
             Empresa
@@ -386,7 +391,8 @@ export const DashboardConfig = () => {
                                         tipo_categoria: item.tipo_categoria || 'ambos',
                                         referencias_ids: item.referencias_ids,
                                         ordem: item.ordem,
-                                        is_active: item.is_active
+                                        is_active: item.is_active,
+                                        cor_resultado: item.cor_resultado
                                       });
                                       setShowModal(true);
                                     }}
@@ -468,7 +474,7 @@ export const DashboardConfig = () => {
         </div>
       )}
 
-      {/* Modal de Edição */}
+      {/* Modal de Edição/Criação */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
@@ -486,7 +492,8 @@ export const DashboardConfig = () => {
                     tipo_categoria: 'ambos',
                     referencias_ids: [],
                     ordem: 0,
-                    is_active: true
+                    is_active: true,
+                    cor_resultado: '#44FF44'
                   });
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
@@ -506,19 +513,6 @@ export const DashboardConfig = () => {
                   onChange={(e) => setFormData({ ...formData, titulo_personalizado: e.target.value })}
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                   placeholder="Nome que será exibido no dashboard"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  Ordem de Exibição
-                </label>
-                <input
-                  type="number"
-                  value={formData.ordem}
-                  onChange={(e) => setFormData({ ...formData, ordem: parseInt(e.target.value) })}
-                  min={0}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 />
               </div>
 
@@ -619,6 +613,32 @@ export const DashboardConfig = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Cor do Resultado
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={formData.cor_resultado === '#44FF44'}
+                      onChange={() => setFormData({ ...formData, cor_resultado: '#44FF44' })}
+                      className="text-green-600"
+                    />
+                    <span className="text-green-400">Verde</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={formData.cor_resultado === '#FF4444'}
+                      onChange={() => setFormData({ ...formData, cor_resultado: '#FF4444' })}
+                      className="text-red-600"
+                    />
+                    <span className="text-red-400">Vermelho</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -645,7 +665,8 @@ export const DashboardConfig = () => {
                     tipo_categoria: 'ambos',
                     referencias_ids: [],
                     ordem: 0,
-                    is_active: true
+                    is_active: true,
+                    cor_resultado: '#44FF44'
                   });
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
