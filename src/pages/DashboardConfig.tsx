@@ -392,7 +392,7 @@ export const DashboardConfig = () => {
                                         referencias_ids: item.referencias_ids,
                                         ordem: item.ordem,
                                         is_active: item.is_active,
-                                        cor_resultado: item.cor_resultado
+                                        cor_resultado: item.cor_resultado || '#44FF44'
                                       });
                                       setShowModal(true);
                                     }}
