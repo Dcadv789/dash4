@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, GripVertical, X, Save, AlertCircle } from 'lucide-react';
+import { Plus, GripVertical, X, Save, AlertCircle, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -73,12 +73,18 @@ export const DashboardConfig = () => {
         .order('code');
       setIndicators(indicatorsData || []);
 
-      // Fetch DRE accounts
+      // Fetch DRE accounts - using the correct column name 'nome'
       const { data: accountsData } = await supabase
         .from('contas_dre_modelo')
-        .select('id, nome as name')
+        .select('id, nome')
         .order('ordem_padrao');
-      setDreAccounts(accountsData?.map(acc => ({ ...acc, code: '' })) || []);
+      
+      // Transform the data to match our Reference interface
+      setDreAccounts(accountsData?.map(acc => ({ 
+        id: acc.id, 
+        name: acc.nome, // Map 'nome' to 'name'
+        code: '' 
+      })) || []);
     } catch (err) {
       console.error('Error fetching references:', err);
       setError('Erro ao carregar referências');
