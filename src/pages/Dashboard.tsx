@@ -161,13 +161,27 @@ export const Dashboard = () => {
 
     try {
       // Get indicator configuration
-      const { data: indicator, error: indicatorError } = await supabase
+      const { data: indicators, error: indicatorError } = await supabase
         .from('indicators')
         .select('*')
-        .eq('id', indicatorId)
-        .single();
+        .eq('id', indicatorId);
 
-      if (indicatorError) throw indicatorError;
+      if (indicatorError) {
+        console.error('Error fetching indicator:', indicatorError);
+        return 0;
+      }
+
+      // Handle case where no indicator is found
+      if (!indicators || indicators.length === 0) {
+        console.warn(`No indicator found with id: ${indicatorId}`);
+        return 0;
+      }
+
+      // Use the first indicator if multiple are returned (shouldn't happen with proper data)
+      const indicator = indicators[0];
+      if (indicators.length > 1) {
+        console.warn(`Multiple indicators found with id: ${indicatorId}, using first one`);
+      }
 
       // For manual indicators, get the value directly
       if (indicator.type === 'manual') {
