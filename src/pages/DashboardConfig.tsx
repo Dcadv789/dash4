@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, GripVertical, X, Save, AlertCircle, Check, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, PencilIcon, Trash2, Save, X, Check, Eye, BarChart2, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 interface DashboardItem {
   id: string;
