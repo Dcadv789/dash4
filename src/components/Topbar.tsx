@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 export const Topbar = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
+  const [isVisualizationsOpen, setIsVisualizationsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -16,6 +17,7 @@ export const Topbar = () => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setIsSettingsOpen(false);
         setIsFinanceOpen(false);
+        setIsVisualizationsOpen(false);
       }
     };
 
@@ -131,6 +133,30 @@ export const Topbar = () => {
                       className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
                     >
                       DRE por Empresa
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="relative group">
+                <button
+                  onMouseEnter={() => setIsVisualizationsOpen(true)}
+                  className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 flex items-center justify-between"
+                >
+                  <span>VisualizaçõesV0</span>
+                  <ChevronRight size={16} />
+                </button>
+                {isVisualizationsOpen && (
+                  <div className="absolute left-full top-0 w-48 bg-zinc-800 rounded-lg shadow-lg py-1"
+                       onMouseLeave={() => setIsVisualizationsOpen(false)}>
+                    <button
+                      onClick={() => {
+                        navigate('/dashboard-config');
+                        setIsSettingsOpen(false);
+                        setIsVisualizationsOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
+                    >
+                      DashboardV0
                     </button>
                   </div>
                 )}

@@ -12,6 +12,8 @@ import { EmpresasContasDRE } from './pages/EmpresasContasDRE';
 import { RawData } from './pages/RawData';
 import { Login } from './pages/Login';
 import { DREVisualizacao } from './pages/DREVisualizacao';
+import { Dashboard } from './pages/Dashboard';
+import { DashboardConfig } from './pages/DashboardConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -57,6 +59,8 @@ function App() {
           <Route path="/dre" element={<PrivateRoute><DREVisualizacao /></PrivateRoute>} />
           <Route path="/dre-model-config" element={<PrivateRoute><DreModelConfig /></PrivateRoute>} />
           <Route path="/empresas-contas-dre" element={<PrivateRoute><EmpresasContasDRE /></PrivateRoute>} />
+          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/dashboard-config" element={<PrivateRoute><DashboardConfig /></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute>
             <div className="max-w-7xl mx-auto">
               <h1 className="text-3xl font-bold">Bem-vindo ao Sistema</h1>
