@@ -2,6 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { Plus, PencilIcon, Trash2, Save, X, Eye, BarChart2, ArrowUp, ArrowDown, List } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+interface Company {
+  id: string;
+  trading_name: string;
+}
+
+interface Reference {
+  id: string;
+  name: string;
+  code?: string;
+  type?: 'revenue' | 'expense';
+}
+
+type CategoryFilter = 'all' | 'revenue' | 'expense';
+type DataSourceFilter = 'all' | 'categoria' | 'indicador' | 'conta_dre';
+
 interface DashboardItem {
   id: string;
   empresa_id: string;
@@ -19,21 +34,6 @@ interface DashboardItem {
   }[];
   top_limit?: number;
 }
-
-interface Company {
-  id: string;
-  trading_name: string;
-}
-
-interface Reference {
-  id: string;
-  name: string;
-  code?: string;
-  type?: 'revenue' | 'expense';
-}
-
-type CategoryFilter = 'all' | 'revenue' | 'expense';
-type DataSourceFilter = 'all' | 'categoria' | 'indicador' | 'conta_dre';
 
 export const DashboardConfig = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -66,12 +66,12 @@ export const DashboardConfig = () => {
 
   useEffect(() => {
     fetchCompanies();
-    fetchReferences();
   }, []);
 
   useEffect(() => {
     if (selectedCompanyId) {
       fetchItems();
+      fetchReferences();
     }
   }, [selectedCompanyId]);
 
@@ -243,19 +243,6 @@ export const DashboardConfig = () => {
       return refs;
     }
     return [];
-  };
-
-  const getReferenceName = (id: string, tipo: 'categoria' | 'indicador' | 'conta_dre') => {
-    switch (tipo) {
-      case 'categoria':
-        return categories.find(c => c.id === id)?.name;
-      case 'indicador':
-        return indicators.find(i => i.id === id)?.name;
-      case 'conta_dre':
-        return dreAccounts.find(a => a.id === id)?.name;
-      default:
-        return 'Desconhecido';
-    }
   };
 
   return (
@@ -759,6 +746,7 @@ export const DashboardConfig = () => {
                       onChange={() => setFormData({ ...formData, cor_resultado: '#44FF44' })}
                       className="text-green-600"
                     />
+                    
                     <span className="text-green-400">Verde</span>
                   </label>
                   <label className="flex items-center gap-2">
